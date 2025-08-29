@@ -14,7 +14,7 @@ http.route({
     const secret = process.env.CLERK_WEBHOOK_SECRET;
     if (!secret) throw new Error("Missing CLERK_WEBHOOK_SECRET");
 
-    // Must verify the RAW payload string
+    // Verify RAW payload (not JSON-parsed)
     const headers = {
       "svix-id": request.headers.get("svix-id"),
       "svix-timestamp": request.headers.get("svix-timestamp"),
@@ -41,25 +41,24 @@ http.route({
         // ---------- Users ----------
         case "user.created":
         case "user.updated": {
-          const d = evt.data;
+          const d = evt.data as any;
 
-          // Prefer Clerk's primary email if available
-          const primaryId = (d as any).primary_email_address_id as string | undefined;
+          const primaryId = d.primary_email_address_id as string | undefined;
           const email =
-            (Array.isArray((d as any).email_addresses)
-              ? (d as any).email_addresses.find((e: any) => e.id === primaryId)?.email_address ??
-                (d as any).email_addresses[0]?.email_address
+            (Array.isArray(d.email_addresses)
+              ? d.email_addresses.find((e: any) => e.id === primaryId)?.email_address ??
+                d.email_addresses[0]?.email_address
               : undefined)?.toLowerCase() || undefined;
 
           const displayName =
-            [ (d as any).first_name ?? "", (d as any).last_name ?? "" ].join(" ").trim() ||
-            (d as any).username ||
+            [d.first_name ?? "", d.last_name ?? ""].join(" ").trim() ||
+            d.username ||
             undefined;
 
-          const pictureUrl = (d as any).image_url || undefined;
+          const pictureUrl = d.image_url || undefined;
 
           await ctx.runMutation(api.users.upsertUserFromClerk, {
-            clerkUserId: (d as any).id,
+            clerkUserId: d.id,
             email,
             displayName,
             pictureUrl,
@@ -74,11 +73,11 @@ http.route({
           break;
         }
 
-        // ---------- Organizations (optional) ----------
+        // ---------- Organizations ----------
         case "organization.created":
         case "organization.updated": {
           const d = evt.data as any;
-          await ctx.runMutation(api.users.upsertOrgFromClerk, {
+          await ctx.runMutation(api.orgs.upsertOrgFromClerk, {
             clerkOrgId: d.id,
             name: d.name,
           });
@@ -86,7 +85,7 @@ http.route({
         }
 
         case "organization.deleted": {
-          await ctx.runMutation(api.users.deleteOrgByClerkId, {
+          await ctx.runMutation(api.orgs.deleteOrgByClerkId, {
             clerkOrgId: (evt.data as any).id,
           });
           break;
@@ -96,18 +95,17 @@ http.route({
         case "organizationMembership.created":
         case "organizationMembership.updated": {
           const m = evt.data as any;
-          await ctx.runMutation(api.users.upsertOrgMembershipFromClerk, {
+          await ctx.runMutation(api.orgMembers.upsertFromClerk, {
             clerkMembershipId: m.id,
             clerkOrgId: m.organization?.id,
             clerkUserId: m.public_user_data?.user_id,
-            clerkRole: m.role, // "org:admin" | "org:member"
+            clerkRole: m.role, // "org:admin" | "org:member" | maybe "org:owner"
           });
           break;
         }
 
         case "organizationMembership.deleted": {
-          // FIX: keep namespace consistent with others
-          await ctx.runMutation(api.users.deleteOrgMembershipByClerkId, {
+          await ctx.runMutation(api.orgMembers.deleteByClerkMembershipId, {
             clerkMembershipId: (evt.data as any).id,
           });
           break;
