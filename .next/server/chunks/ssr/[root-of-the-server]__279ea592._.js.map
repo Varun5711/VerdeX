@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 16, "column": 0}, "map": {"version":3,"sources":["file:///Users/varunhotani/Desktop/VerdeX/VerdeX/src/app/dashboard/page.tsx"],"sourcesContent":["export default function DashboardHome() {\n    return (\n      <div>\n        <h2 className=\"text-xl font-bold\">Welcome to Green-H2 Dashboard</h2>\n        <p>Select an org and manage facilities, batches, and credits.</p>\n      </div>\n    );\n  }"],"names":[],"mappings":";;;;;;AAAe,SAAS;IACpB,qBACE,6QAAC;;0BACC,6QAAC;gBAAG,WAAU;0BAAoB;;;;;;0BAClC,6QAAC;0BAAE;;;;;;;;;;;;AAGT","debugId":null}}]
-}

@@ -5,6 +5,7 @@ import { api } from "./_generated/api";
 
 // --- Helpers using WebCrypto (browser-safe) ---
 
+
 async function sha256hex(s: string): Promise<string> {
   const buf = new TextEncoder().encode(s);
   const digest = await crypto.subtle.digest("SHA-256", buf);
