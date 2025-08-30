@@ -1,0 +1,8 @@
+version: "1.0.0"
+
+services:
+  backend:
+    command: "npx convex dev"
+  frontend:
+    command: "npm run dev"
+
