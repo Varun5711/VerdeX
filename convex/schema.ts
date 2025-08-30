@@ -3,6 +3,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 const Address = v.string();   // "0x..."
+
 const Hex = v.string();       // generic hex "0x..."
 const CidOrKey = v.string();  // IPFS CID or cloud object key
 

@@ -5,6 +5,7 @@ import { api } from "../../../../../../../convex/_generated/api";
 import { useParams } from "next/navigation";
 import type { Id } from "../../../../../../../convex/_generated/dataModel";
 
+
 export default function MetersPage() {
   const params = useParams();
   const facilityId = params.facilityId as string as Id<"facilities">;

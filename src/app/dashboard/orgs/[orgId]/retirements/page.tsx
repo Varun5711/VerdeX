@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../../../../../convex/_generated/api";
 import { useParams } from "next/navigation";
 
+
 export default function RetirementsPage() {
   const { orgId } = useParams();
   const retirements = useQuery(api.retirements.listByOrg, { owner: String(orgId) });

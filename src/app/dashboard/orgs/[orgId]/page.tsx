@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import { useParams } from "next/navigation";
 
+
 export default function OrgPage() {
   const { orgId } = useParams();
 

@@ -2,6 +2,7 @@ import * as dotenv from "dotenv";
 dotenv.config();
 import hre from "hardhat";
 
+
 async function main() {
   const { ethers } = hre;
   const contractAddr = process.env.ERC1155_ADDRESS!;

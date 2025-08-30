@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { api } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
+
 // ---- functional roles in your app (match schema) ----
 type Functional = "PRODUCER" | "CERTIFIER" | "AUTHORITY" | "AUDITOR" | "ADMIN";
 

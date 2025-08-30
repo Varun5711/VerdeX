@@ -1,6 +1,7 @@
 import React from 'react';
 import CardNav from '../../components/reactbits/CardNav';
 
+
 const PublicNavbar = () => {
   const items = [
     {

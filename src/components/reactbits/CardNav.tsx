@@ -5,6 +5,7 @@ import { gsap } from "gsap";
 // use your own icon import if react-icons is not available
 // import { GoArrowUpRight } from "react-icons/go";
 
+
 type CardNavLink = {
   label: string;
   href: string;

@@ -3,6 +3,7 @@
 import { useUser } from "@clerk/nextjs";
 import { useAccount } from "wagmi";
 
+
 export default function TopbarUser() {
   const { user } = useUser();
   const { address, isConnected } = useAccount();

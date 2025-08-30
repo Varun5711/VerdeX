@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react"
 import { createNoise3D } from "simplex-noise"
 import { motion } from "motion/react"
 
+
 interface VortexProps {
   children?: any
   className?: string
