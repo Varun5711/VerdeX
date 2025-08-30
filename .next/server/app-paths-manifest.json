@@ -1,0 +1,15 @@
+{
+  "/(auth)/sign-in/[[...sign-in]]/page": "app/(auth)/sign-in/[[...sign-in]]/page.js",
+  "/(auth)/sign-up/[[...sign-up]]/page": "app/(auth)/sign-up/[[...sign-up]]/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/dashboard/orgs/[orgId]/batches/page": "app/dashboard/orgs/[orgId]/batches/page.js",
+  "/dashboard/orgs/[orgId]/docs/page": "app/dashboard/orgs/[orgId]/docs/page.js",
+  "/dashboard/orgs/[orgId]/facilities/new/page": "app/dashboard/orgs/[orgId]/facilities/new/page.js",
+  "/dashboard/orgs/[orgId]/facilities/page": "app/dashboard/orgs/[orgId]/facilities/page.js",
+  "/dashboard/orgs/[orgId]/page": "app/dashboard/orgs/[orgId]/page.js",
+  "/dashboard/orgs/[orgId]/retirements/page": "app/dashboard/orgs/[orgId]/retirements/page.js",
+  "/dashboard/overview/page": "app/dashboard/overview/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/page": "app/page.js"
+}

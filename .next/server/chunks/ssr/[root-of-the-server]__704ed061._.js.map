@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 12, "column": 0}, "map": {"version":3,"sources":["file:///Users/varunhotani/Desktop/VerdeX/VerdeX/src/app/page.tsx"],"sourcesContent":["import HeroSection from \"@/components/hero/HeroSection\"\nimport Publicnavbar from \"@/components/nav/Publicnavbar\"\n\n\nexport default function Page() {\n  return (\n    <main>\n      <Publicnavbar />\n      <HeroSection />\n    </main>\n  )\n}\n"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;AAIe,SAAS;IACtB,qBACE,6QAAC;;0BACC,6QAAC;;;;;0BACD,6QAAC;;;;;;;;;;;AAGP","debugId":null}}]
+}

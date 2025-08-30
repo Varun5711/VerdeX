@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///Users/varunhotani/Desktop/VerdeX/VerdeX/src/components/providers/ClerkProvider.tsx"],"sourcesContent":["\"use client\";\n\nimport { ClerkProvider, useAuth } from \"@clerk/nextjs\";\nimport { ConvexReactClient } from \"convex/react\";\nimport { ConvexProviderWithClerk } from \"convex/react-clerk\";\n\nconst convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);\n\nfunction ConvexClerkProvider({ children }: { children: React.ReactNode }) {\n  return (\n    <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>\n      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>\n        {children}\n      </ConvexProviderWithClerk>\n    </ClerkProvider>\n  );\n}\n\nexport default ConvexClerkProvider;"],"names":[],"mappings":";;;;AAMqC;;AAJrC;AAAA;AACA;AAAA;AACA;AAAA;AAJA;;;;;AAMA,MAAM,SAAS,IAAI,sNAAiB;AAEpC,SAAS,oBAAoB,KAA2C;QAA3C,EAAE,QAAQ,EAAiC,GAA3C;IAC3B,qBACE,4NAAC,mOAAa;QAAC,cAAc;kBAC3B,cAAA,4NAAC,sPAAuB;YAAC,QAAQ;YAAQ,SAAS,sSAAO;sBACtD;;;;;;;;;;;AAIT;KARS;uCAUM","debugId":null}}]
+}

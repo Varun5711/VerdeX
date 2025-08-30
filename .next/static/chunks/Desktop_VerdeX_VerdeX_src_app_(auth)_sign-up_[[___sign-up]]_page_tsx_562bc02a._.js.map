@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///Users/varunhotani/Desktop/VerdeX/VerdeX/src/app/%28auth%29/sign-up/%5B%5B...sign-up%5D%5D/page.tsx"],"sourcesContent":["// client/src/app/(auth)/sign-up/[[...sign-up]]/page.tsx\n\"use client\";\n\nimport { SignUp } from \"@clerk/nextjs\";\n\nexport default function Page() {\n  return (\n    <div className=\"flex min-h-screen items-center justify-center bg-gray-50\">\n      <SignUp\n        appearance={{\n          elements: {\n            formButtonPrimary: \"bg-green-600 hover:bg-green-700 text-white\",\n          },\n        }}\n        path=\"/sign-up\"\n        routing=\"path\"\n        signInUrl=\"/sign-in\"\n      />\n    </div>\n  );\n}"],"names":[],"mappings":"AAAA,wDAAwD;;;;;;AAGxD;AAFA;;;AAIe,SAAS;IACtB,qBACE,4NAAC;QAAI,WAAU;kBACb,cAAA,4NAAC,yPAAM;YACL,YAAY;gBACV,UAAU;oBACR,mBAAmB;gBACrB;YACF;YACA,MAAK;YACL,SAAQ;YACR,WAAU;;;;;;;;;;;AAIlB;KAfwB","debugId":null}}]
+}
