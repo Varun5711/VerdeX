@@ -46,63 +46,51 @@ export const get = query({
   },
 });
 
-
+import { nanoid } from "nanoid";
 
 export const createFacility = mutation({
   args: {
     clerkUserId: v.string(),
+    facilityId: v.optional(v.string()),   // 👈 make optional
     orgId: v.id("orgs"),
-    facilityId: v.string(), // human code unique per org
     name: v.string(),
     location: v.object({
       country: v.string(),
       region: v.optional(v.string()),
-      lat: v.optional(v.number()),
-      lon: v.optional(v.number()),
       gridZone: v.optional(v.string()),
+      lat: v.optional(v.float64()),
+      lon: v.optional(v.float64()),
     }),
     tech: v.optional(
       v.object({
         electrolyzerType: v.optional(v.string()),
-        capacityMW: v.optional(v.string()), // decimal string
+        capacityMW: v.optional(v.string()),
         renewableSource: v.optional(v.string()),
       })
     ),
   },
-  handler: async (ctx, args) => {
-    await requireOrgRole(ctx, args.clerkUserId, args.orgId, ["ADMIN", "PRODUCER"]);
-
-    const code = normalizeStr(args.facilityId);
-    if (!code) throw new Error("facilityId required");
-    const name = normalizeStr(args.name);
-    if (!name) throw new Error("name required");
-
-    // Uniqueness per org (schema has byFacilityId global; enforce per-org here)
-    const existingInOrg = await ctx.db
-      .query("facilities")
-      .withIndex("byOrg", q => q.eq("orgId", args.orgId))
-      .filter(q => q.eq(q.field("facilityId"), code))
-      .first();
-    if (existingInOrg) throw new Error("facilityId already exists in this org");
-
-    const me = await ctx.db
+  handler: async (ctx, { clerkUserId, facilityId, orgId, name, location, tech }) => {
+    const user = await ctx.db
       .query("users")
-      .withIndex("byClerkUserId", q => q.eq("clerkUserId", args.clerkUserId))
+      .withIndex("byClerkUserId", q => q.eq("clerkUserId", clerkUserId))
       .unique();
 
-    const _id = await ctx.db.insert("facilities", {
-      orgId: args.orgId,
-      facilityId: code,
+    if (!user) throw new Error("User not found");
+
+    const id = await ctx.db.insert("facilities", {
+      facilityId: facilityId ?? `fac_${nanoid(8)}`, // 👈 fallback auto-generate
+      orgId,
       name,
-      location: args.location,
-      tech: args.tech,
+      location,
+      tech,
+      createdBy: user._id,
       createdAt: Date.now(),
-      createdBy: me?._id as Id<"users">,
     });
 
-    return { facilityId: _id };
+    return id;
   },
 });
+
 
 export const updateFacility = mutation({
   args: {
@@ -130,7 +118,7 @@ export const updateFacility = mutation({
     const fac = await ctx.db.get(id);
     if (!fac) throw new Error("Facility not found");
 
-    await requireOrgRole(ctx, clerkUserId, fac.orgId, ["ADMIN", "PRODUCER"]);
+    await requireOrgRole(ctx, clerkUserId, fac.orgId, ["PRODUCER"]);
 
     const patch: any = {};
     if (typeof name !== "undefined") patch.name = normalizeStr(name);
@@ -170,6 +158,13 @@ export const getFacility = query({
   args: { id: v.id("facilities") },
   handler: async (ctx, { id }) => {
     return await ctx.db.get(id);
+  },
+});
+
+export const getFirst = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("facilities").first();
   },
 });
 

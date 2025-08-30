@@ -412,3 +412,36 @@ export const markNotificationRead = mutation({
     await ctx.db.patch(args.notificationId, { readAt: Date.now() });
   },
 });
+
+// convex/users.ts
+export const listOrgsForUser = query({
+  args: { clerkUserId: v.string() },
+  handler: async (ctx, { clerkUserId }) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("byClerkUserId", (q) => q.eq("clerkUserId", clerkUserId))
+      .unique();
+
+    if (!user) return [];
+
+    const memberships = await ctx.db
+      .query("orgMembers")
+      .withIndex("byUser", (q) => q.eq("userId", user._id))
+      .collect();
+
+    // Attach org details
+    const result = [];
+    for (const m of memberships) {
+      const org = await ctx.db.get(m.orgId);
+      if (org) {
+        result.push({
+          orgId: m.orgId,
+          orgName: org.name,
+          roles: m.roles ?? [],
+        });
+      }
+    }
+
+    return result;
+  },
+});

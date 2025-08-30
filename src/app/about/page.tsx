@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 "use client"
 
 import Link from "next/link"
@@ -759,3 +760,26 @@ export default function AboutPage() {
     </main>
   )
 }
+=======
+import Publicnavbar from "../../components/nav/Publicnavbar";
+
+export default function AboutPage() {
+  return (
+    <main>
+      <Publicnavbar />
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-4xl font-bold mb-4">About Us</h1>
+        <p className="text-lg mb-4">
+          Welcome to our platform for green hydrogen credits. We are dedicated to providing a transparent and reliable system for tracking and trading renewable energy credits.
+        </p>
+        <p className="text-lg mb-4">
+          Our mission is to accelerate the transition to a green economy by creating a trusted marketplace for green hydrogen. We believe that by leveraging blockchain technology, we can bring a new level of transparency and efficiency to the renewable energy sector.
+        </p>
+        <p className="text-lg mb-4">
+          Our team is composed of experts in renewable energy, blockchain technology, and software engineering. We are passionate about building a sustainable future and are excited to have you on this journey with us.
+        </p>
+      </div>
+    </main>
+  );
+}
+>>>>>>> f8dab65 (add)

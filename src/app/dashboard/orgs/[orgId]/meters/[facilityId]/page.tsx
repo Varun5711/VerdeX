@@ -2,25 +2,23 @@
 
 import { useQuery } from "convex/react";
 import { api } from "../../../../../../../convex/_generated/api";
-import { useParams } from "next/navigation";
-import type { Id } from "../../../../../../../convex/_generated/dataModel";
-
+import { useParams, useRouter } from "next/navigation";
 
 export default function MetersPage() {
-  const params = useParams();
-  const facilityId = params.facilityId as string as Id<"facilities">;
-
-  const meters = useQuery(api.meters.listByFacility, { facilityId });
+  const { facilityId, orgId } = useParams();
+  const meters = useQuery(api.meters.listByFacility, { facilityId: facilityId as any });
+  const router = useRouter();
 
   if (!meters) return <div>Loading...</div>;
 
   return (
     <div>
       <h1>Meters</h1>
+      <button onClick={() => router.push(`/dashboard/orgs/${orgId}/meters/${facilityId}/new`)}>+ Add Meter</button>
       <ul>
-        {meters.map((m) => (
+        {meters.map((m:any) => (
           <li key={m._id}>
-            Meter ID: {m.meterId} | Kind: {m.kind} | Unit: {m.unit}
+            {m.meterId} ({m.kind}) [{m.unit}]
           </li>
         ))}
       </ul>

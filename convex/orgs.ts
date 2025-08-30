@@ -2,6 +2,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
+import { api } from "./_generated/api";
 
 
 /**
@@ -226,5 +227,61 @@ export const listUserMemberships = query({
       .query("orgMembers")
       .withIndex("byUser", (q) => q.eq("userId", user._id))
       .collect();
+  },
+});
+
+export const getDefault = query({
+  args: {},
+  handler: async (ctx) => {
+    // For now just return the first org
+    return await ctx.db.query("orgs").first();
+  },
+});
+
+export const createOrg = mutation({
+  args: {
+    clerkUserId: v.string(),
+    name: v.string(),
+    type: v.union(
+      v.literal("PRODUCER"),
+      v.literal("BUYER"),
+    ),
+  },
+  handler: async (ctx, { clerkUserId, name, type }) => {
+    // Resolve convex user
+    const user = await ctx.runQuery(api.users.getUserByClerkId, { clerkUserId });
+    if (!user) throw new Error("User not found");
+
+    // Insert org
+    const orgId = await ctx.db.insert("orgs", {
+      name,
+      type,
+      createdAt: Date.now(),
+      createdBy: user._id,
+    });
+
+    // Figure out functional roles to assign
+    const defaultRoles: Array<"PRODUCER" | "BUYER" | "CERTIFIER" | "AUTHORITY" | "AUDITOR" | "ADMIN"> = [
+      "ADMIN", // always admin of org
+    ];
+
+    if (type === "PRODUCER") {
+      defaultRoles.push("PRODUCER");
+    }
+    if (type === "BUYER") {
+      defaultRoles.push("BUYER");
+    }
+
+    // Create org membership with those roles
+    await ctx.db.insert("orgMembers", {
+      orgId,
+      userId: user._id,
+      roles: defaultRoles,
+      orgRole: "ADMIN",
+      invitedBy: user._id,
+      invitedAt: Date.now(),
+    });
+
+    return orgId;
   },
 });

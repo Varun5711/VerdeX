@@ -4,7 +4,7 @@ import { httpAction } from "./_generated/server";
 import { Webhook, type WebhookRequiredHeaders } from "svix";
 import type { WebhookEvent } from "@clerk/nextjs/server";
 import { api } from "./_generated/api";
-
+import { Id } from "./_generated/dataModel";
 
 const http = httpRouter();
 
@@ -33,7 +33,7 @@ http.route({
     try {
       evt = wh.verify(payload, headers) as WebhookEvent;
     } catch (e) {
-      console.error("Clerk webhook verify failed:", e);
+      console.error("❌ Clerk webhook verify failed:", e);
       return new Response("Bad signature", { status: 400 });
     }
 
@@ -43,29 +43,52 @@ http.route({
       switch (evt.type) {
         // ---------- Users ----------
         case "user.created":
-case "user.updated": {
-  const d = evt.data as any;
+        case "user.updated": {
+          const d = evt.data as any;
 
-  const primaryEmailId = d.primary_email_address_id;
-  const email = (d.email_addresses?.find((e: any) => e.id === primaryEmailId)?.email_address ??
-                 d.email_addresses?.[0]?.email_address) ?? undefined;
+          const primaryEmailId = d.primary_email_address_id;
+          const email =
+            d.email_addresses?.find((e: any) => e.id === primaryEmailId)?.email_address ??
+            d.email_addresses?.[0]?.email_address ??
+            undefined;
 
-  const wallet = d.web3_wallets?.[0]?.web3_wallet; // first wallet
-  const displayName = [d.first_name ?? "", d.last_name ?? ""].join(" ").trim() ||
-                      d.username ||
-                      (wallet ? wallet.slice(0,6) + "..." + wallet.slice(-4) : undefined);
+          const wallet = d.web3_wallets?.[0]?.web3_wallet; // take first wallet if linked
+          const displayName =
+            [d.first_name ?? "", d.last_name ?? ""].join(" ").trim() ||
+            d.username ||
+            (wallet ? wallet.slice(0, 6) + "..." + wallet.slice(-4) : undefined);
 
-  const pictureUrl = d.image_url || d.profile_image_url || undefined;
+          const pictureUrl = d.image_url || d.profile_image_url || undefined;
 
-  await ctx.runMutation(api.users.upsertUserFromClerk, {
-    clerkUserId: d.id,
-    email,
-    displayName,
-    pictureUrl,
-    wallet,  // 👈 new field
-  });
-  break;
-}
+          // Sync user into Convex
+          await ctx.runMutation(api.users.upsertUserFromClerk, {
+            clerkUserId: d.id,
+            email,
+            displayName,
+            pictureUrl,
+            wallet,
+          });
+
+          // If it's a brand new user, assign default roles (BUYER, PRODUCER)
+          if (evt.type === "user.created") {
+            // Use a query to fetch the default org
+            const defaultOrg = await ctx.runQuery(api.orgs.getDefault, {}); 
+            if (defaultOrg) {
+              await ctx.runMutation(api.orgMembers.assignRole, {
+                orgId: defaultOrg._id as Id<"orgs">,
+                clerkUserId: d.id,
+                role: "BUYER",
+              });
+              await ctx.runMutation(api.orgMembers.assignRole, {
+                orgId: defaultOrg._id as Id<"orgs">,
+                clerkUserId: d.id,
+                role: "PRODUCER",
+              });
+            }
+          }
+
+          break;
+        }
 
         case "user.deleted": {
           await ctx.runMutation(api.users.deleteUserByClerkId, {
@@ -100,7 +123,7 @@ case "user.updated": {
             clerkMembershipId: m.id,
             clerkOrgId: m.organization?.id,
             clerkUserId: m.public_user_data?.user_id,
-            clerkRole: m.role, // "org:admin" | "org:member" | maybe "org:owner"
+            clerkRole: m.role,
           });
           break;
         }
@@ -117,7 +140,7 @@ case "user.updated": {
           break;
       }
     } catch (err) {
-      console.error("Webhook handler error:", err);
+      console.error("❌ Webhook handler error:", err);
       return new Response("Handler error", { status: 500 });
     }
 

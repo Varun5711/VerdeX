@@ -343,3 +343,48 @@ export const deleteByClerkMembershipId = mutation({
     return { ok: true };
   },
 });
+
+export const assignRole = mutation({
+  args: {
+    orgId: v.id("orgs"),
+    clerkUserId: v.string(),
+    role: v.union(
+      v.literal("PRODUCER"),
+      v.literal("BUYER"),
+      v.literal("CERTIFIER"),
+      v.literal("AUTHORITY"),
+      v.literal("AUDITOR"),
+      v.literal("ADMIN")
+    ),
+    secret: v.optional(v.string()), // 👈 add secret
+  },
+  handler: async (ctx, { orgId, clerkUserId, role, secret }) => {
+    // Default roles don’t need secrets
+    if (role === "CERTIFIER" && secret !== process.env.CERTIFIER_SECRET) {
+      throw new Error("Invalid secret for CERTIFIER");
+    }
+    if (role === "AUTHORITY" && secret !== process.env.AUTHORITY_SECRET) {
+      throw new Error("Invalid secret for AUTHORITY");
+    }
+
+    // Resolve user
+    const user = await ctx.db
+      .query("users")
+      .withIndex("byClerkUserId", q => q.eq("clerkUserId", clerkUserId))
+      .unique();
+
+    if (!user) throw new Error("User not found");
+
+    // Upsert org member
+    await ctx.db.insert("orgMembers", {
+      orgId,
+      userId: user._id,
+      orgRole: "MEMBER",   // base role
+      roles: [role],       // store functional role
+      invitedBy: user._id, // self-assignment for now
+      invitedAt: Date.now(),
+    });
+
+    return { ok: true, role };
+  },
+});
