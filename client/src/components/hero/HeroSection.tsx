@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Vortex } from "@/components/ui/vortex"
+import Link from "next/link"
 
 const HeroSection = () => {
   const [isVisible, setIsVisible] = useState(false)
@@ -15,10 +16,10 @@ const HeroSection = () => {
       {/* Background Vortex */}
       <div className="absolute inset-0 z-10 pointer-events-none" aria-hidden="true">
         <Vortex
-          backgroundColor="#fffff" // slate-950 background for deep space feel
+          backgroundColor="#fffff"
           particleCount={800}
           rangeY={600}
-          baseHue={170} // between emerald and cyan for aurora effect
+          baseHue={170}
           baseSpeed={0.15}
           rangeSpeed={1.6}
           baseRadius={0.8}
@@ -27,7 +28,7 @@ const HeroSection = () => {
         />
       </div>
 
-      {/* Subtle vignette to focus the content */}
+      {/* Subtle vignette */}
       <div
         className="pointer-events-none absolute inset-0 z-0"
         style={{
@@ -67,9 +68,13 @@ const HeroSection = () => {
             Get Started
             <span className="sr-only"> with green hydrogen credits</span>
           </button>
-          <button className="px-8 py-4 border border-cyan-400 text-cyan-300 font-medium tracking-wide hover:bg-slate-900/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 transition-colors duration-200">
+          
+          <Link
+            href="/about"
+            className="px-8 py-4 border border-cyan-400 text-cyan-300 font-medium tracking-wide hover:bg-slate-900/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 transition-colors duration-200 text-center"
+          >
             Learn More
-          </button>
+          </Link>
         </div>
 
         {/* Trust Badges */}
