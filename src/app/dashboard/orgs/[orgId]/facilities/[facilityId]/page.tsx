@@ -18,7 +18,7 @@ export default function FacilitiesPage() {
     <div>
       <h1>Facilities</h1>
       <ul>
-        {facilities.map((f) => (
+        {facilities.map((f:any) => (
           <li key={f._id}>{f.name}</li>
         ))}
       </ul>

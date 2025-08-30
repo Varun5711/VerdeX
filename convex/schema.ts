@@ -87,7 +87,7 @@ export default defineSchema({
     name: v.string(),
     type: OrgType,
     createdAt: v.number(),
-    createdBy: v.id("users"),
+    createdBy: v.string(),
     meta: v.optional(v.object({
       country: v.optional(v.string()),
       region: v.optional(v.string()),

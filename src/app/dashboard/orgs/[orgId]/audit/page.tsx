@@ -21,7 +21,7 @@ export default function AuditPage() {
     <div>
       <h1>Audit Logs</h1>
       <ul>
-        {logs.map((log) => (
+        {logs.map((log:any) => (
           <li key={log._id}>
             [{new Date(log.at).toLocaleString()}]{" "}
             {log.actor} did <b>{log.action}</b> on {log.targetTable}/{log.targetId}
