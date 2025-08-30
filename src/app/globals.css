@@ -112,6 +112,17 @@
   --sidebar-ring: oklch(0.551 0.027 264.364);
 }
 
+@font-face {
+  font-family: 'SF Pro Display';
+  src: url('/fonts/SF-Pro-Display-Regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+body {
+  font-family: 'SF Pro Display', sans-serif;
+}
+
 
 @layer base {
   * {
