@@ -1,5 +1,15 @@
 {
   "dependencies": {
-    "convex": "^1.26.2"
+    "@clerk/nextjs": "^6.31.6",
+    "convex": "^1.26.2",
+    "svix": "^1.75.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "@types/node": "^24.3.0",
+    "dotenv": "^17.2.1",
+    "hardhat": "^3.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
   }
 }

@@ -115,7 +115,9 @@ export default defineSchema({
     .index("byOrg", ["orgId"])
     .index("byUser", ["userId"])
     .index("byOrgUser", ["orgId", "userId"])
-    .index("byClerk", ["clerkOrgId", "clerkMembershipId"]),
+    .index("byClerk", ["clerkOrgId", "clerkMembershipId"])
+    .index("byClerkMembershipId", ["clerkMembershipId"]) ,
+    
 
   // -------------------------
   // Producer Assets
