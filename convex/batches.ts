@@ -4,7 +4,6 @@ import { v } from "convex/values";
 import { api } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
-
 // ---------- Role validator (functional roles in your app) ----------
 const RoleV = v.union(
   v.literal("PRODUCER"),
@@ -68,53 +67,35 @@ async function getUserByClerk(ctx: any, clerkUserId: string) {
 
 // ====================== PROPOSE / UPDATE / REJECT ======================
 
+// convex/batches.ts
 export const propose = mutation({
   args: {
     clerkUserId: v.string(),
+    batchId: v.string(),
     producerOrg: v.id("orgs"),
     facilityId: v.id("facilities"),
-    batchId: v.string(),                 // deterministic id generated client-side
     startTs: v.number(),
     endTs: v.number(),
-    amount: v.string(),                  // decimal string
-    meterHash: v.string(),               // 0x...
-    renewableProofHash: v.string(),      // 0x...
-    docBundleHash: v.string(),           // 0x...
-    status: v.optional(
-      v.union(
-        v.literal("DRAFT"),
-        v.literal("PROPOSED")
-      )
-    ), // default PROPOSED (DRAFT won't create a lock)
+    amount: v.string(),
+    meterHash: v.string(),
+    renewableProofHash: v.string(),
+    docBundleHash: v.string(),
   },
   handler: async (ctx, args) => {
-    if (!(args.startTs < args.endTs)) throw new Error("Invalid time range");
+    const creator = await ctx.db
+      .query("users")
+      .withIndex("byClerkUserId", q => q.eq("clerkUserId", args.clerkUserId))
+      .unique();
 
-    // Auth: only PRODUCER (or ADMIN) of producerOrg can propose
-    await requireFunctionalRole(ctx, args.clerkUserId, args.producerOrg, ["PRODUCER", "ADMIN"]);
+    if (!creator) throw new Error("User not found");
 
-    // Facility must belong to this org
-    const facility = await ctx.db.get(args.facilityId);
-    if (!facility || facility.orgId.toString() !== args.producerOrg.toString()) {
-      throw new Error("Facility does not belong to the producer org");
-    }
-
-    // Uniqueness on batchId
-    const dup = await ctx.db.query("batches").withIndex("byBatchId", q => q.eq("batchId", args.batchId)).unique();
-    if (dup) throw new Error("Batch with this batchId already exists");
-
-    const creator = await getUserByClerk(ctx, args.clerkUserId);
-
-    const status = args.status ?? "PROPOSED";
-
-    // If PROPOSED, enforce locks (no overlapping active lock)
-    if (status === "PROPOSED") {
-      const overlaps = await hasActiveLockOverlap(ctx, args.facilityId, args.startTs, args.endTs);
-      if (overlaps) throw new Error("Time period overlaps an existing locked batch");
-    }
+    // 🔹 get producer wallet from user
+    const producerWallet = creator.wallet;
+    if (!producerWallet) throw new Error("Producer has no wallet linked");
 
     const batchIdDb = await ctx.db.insert("batches", {
-      batchId: args.batchId,
+      batchId: args.batchId,             // external string (UUID or client-generated)
+      batchHumanId: args.batchId,        // ✅ required by schema, same as batchId if nothing else
       producerOrg: args.producerOrg,
       facilityId: args.facilityId,
       startTs: args.startTs,
@@ -123,8 +104,8 @@ export const propose = mutation({
       meterHash: args.meterHash,
       renewableProofHash: args.renewableProofHash,
       docBundleHash: args.docBundleHash,
-      status,
-      createdBy: creator?._id as Id<"users">,
+      status: "PROPOSED",
+      createdBy: creator!._id,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       approvedBy: undefined,
@@ -134,23 +115,9 @@ export const propose = mutation({
       issuedBy: undefined,
       issuedAt: undefined,
       chain: undefined,
+      producerWallet,                     // ✅ store wallet for Authority issuance
     });
-
-    // Create a period lock only for PROPOSED (DRAFT has none)
-    if (status === "PROPOSED") {
-      await ctx.db.insert("periodLocks", {
-        facilityId: args.facilityId,
-        startTs: args.startTs,
-        endTs: args.endTs,
-        batchRef: batchIdDb,
-        reason: "batch-proposal",
-        createdBy: creator?._id as Id<"users">,
-        createdAt: Date.now(),
-        releasedAt: undefined,
-      });
-    }
-
-    return { id: batchIdDb };
+    return batchIdDb;
   },
 });
 
@@ -288,21 +255,30 @@ export const approve = mutation({
     await requireFunctionalRole(ctx, clerkUserId, batch.producerOrg, ["CERTIFIER", "ADMIN"]);
 
     if (batch.status !== "PROPOSED") throw new Error("Batch must be PROPOSED to approve");
-
-    // Basic completeness checks
     if (!batch.meterHash || !batch.renewableProofHash || !batch.docBundleHash) {
       throw new Error("Missing evidence hashes");
     }
 
     const actor = await getUserByClerk(ctx, clerkUserId);
+
+    // ✅ Update batch
     await ctx.db.patch(id, {
       status: "APPROVED",
-      approvedBy: actor?._id as Id<"users">,
+      approvedBy: actor!._id,
       approvedAt: Date.now(),
       updatedAt: Date.now(),
     });
 
-    // Keep the lock active — prevents double counting while awaiting issuance
+    // ✅ Insert a pending certificate
+    await ctx.db.insert("certificates", {
+      batchId: batch._id,
+      amount: batch.amount,
+      createdBy: actor!._id,
+      createdAt: Date.now(),
+      publicSlug: crypto.randomUUID(),
+      status: "PENDING_ISSUE",
+    });
+
     return { ok: true };
   },
 });
@@ -310,40 +286,42 @@ export const approve = mutation({
 export const issue = mutation({
   args: {
     clerkUserId: v.string(),
-    id: v.id("batches"),
-    // optional chain binding for when you wire web3 later
+    batchId: v.id("batches"),
     chain: v.optional(
       v.object({
-        chainId: v.optional(v.number()),
+        chainId: v.optional(v.float64()),
         registry: v.optional(v.string()),
         tokenIdHex: v.optional(v.string()),
         issueTx: v.optional(v.string()),
       })
     ),
+    claimRef: v.string(),
+    amount: v.string(),
+    pdfKey: v.string(),
+    pdfHash: v.string(),
+    publicSlug: v.string(),
   },
-  handler: async (ctx, { clerkUserId, id, chain }) => {
-    const batch = await ctx.db.get(id);
+  handler: async (ctx, { clerkUserId, batchId, chain, claimRef, amount, pdfKey, pdfHash, publicSlug }) => {
+    const batch = await ctx.db.get(batchId);
     if (!batch) throw new Error("Batch not found");
-
-    // Only AUTHORITY (or ADMIN) can issue
-    await requireFunctionalRole(ctx, clerkUserId, batch.producerOrg, ["AUTHORITY", "ADMIN"]);
-
     if (batch.status !== "APPROVED") throw new Error("Batch must be APPROVED to issue");
 
     const actor = await getUserByClerk(ctx, clerkUserId);
-    await ctx.db.patch(id, {
+
+    await ctx.db.patch(batchId, {
       status: "ISSUED",
-      issuedBy: actor?._id as Id<"users">,
+      issuedBy: actor._id as Id<"users">,
       issuedAt: Date.now(),
       updatedAt: Date.now(),
-      chain: chain ?? batch.chain,
+      chain,
     });
 
-    // Keep the lock *unreleased* as a permanent occupancy of that time window.
-    // This ensures no future batches overlap the already-issued period.
+    // (optional) also create a certificate document here if you want auto-certificates
+
     return { ok: true };
   },
 });
+
 
 // ====================== ATTESTATIONS (optional) ======================
 

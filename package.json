@@ -12,6 +12,8 @@
     "@clerk/nextjs": "^6.31.6",
     "@clerk/themes": "^2.4.15",
     "@radix-ui/react-slot": "^1.2.3",
+    "@wagmi/chains": "^1.8.0",
+    "@wagmi/core": "^2.20.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "convex": "^1.26.2",

@@ -2,10 +2,10 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-const Address = v.string();   // "0x..."
+const Address = v.string(); // "0x..."
 
-const Hex = v.string();       // generic hex "0x..."
-const CidOrKey = v.string();  // IPFS CID or cloud object key
+const Hex = v.string(); // generic hex "0x..."
+const CidOrKey = v.string(); // IPFS CID or cloud object key
 
 // --- Enums ---
 const Role = v.union(
@@ -59,10 +59,10 @@ export default defineSchema({
   // -------------------------
   users: defineTable({
     // Clerk primitives
-    clerkUserId: v.string(),                 // e.g., "user_2YxA4..."
+    clerkUserId: v.string(), // e.g., "user_2YxA4..."
     clerkPrimaryEmail: v.optional(v.string()),
-    clerkOrgId: v.optional(v.string()),      // current active org id (Clerk Organizations)
-    clerkOrgRole: v.optional(v.string()),    // current active org role (Clerk)
+    clerkOrgId: v.optional(v.string()), // current active org id (Clerk Organizations)
+    clerkOrgRole: v.optional(v.string()), // current active org role (Clerk)
     // App profile
     displayName: v.optional(v.string()),
     pictureUrl: v.optional(v.string()),
@@ -71,11 +71,11 @@ export default defineSchema({
     linkedAddresses: v.optional(v.array(Address)),
     // App authZ (global fallback; prefer org-scoped roles)
     roles: v.array(Role),
-    orgPrimary: v.optional(v.id("orgs")),    // app org pinned in UI (optional)
+    orgPrimary: v.optional(v.id("orgs")), // app org pinned in UI (optional)
     createdAt: v.number(),
     lastLoginAt: v.optional(v.number()),
     disabled: v.optional(v.boolean()),
-    wallet: v.optional(v.string())
+    wallet: v.optional(v.string()),
   })
     .index("byClerkUserId", ["clerkUserId"])
     .index("byPrimaryAddress", ["primaryAddress"])
@@ -83,19 +83,24 @@ export default defineSchema({
 
   orgs: defineTable({
     // Map to Clerk Organization if you enable it
-    clerkOrgId: v.optional(v.string()),      // e.g., "org_2Zk8a..."
+    clerkOrgId: v.optional(v.string()), // e.g., "org_2Zk8a..."
     name: v.string(),
     type: OrgType,
     createdAt: v.number(),
     createdBy: v.string(),
-    meta: v.optional(v.object({
-      country: v.optional(v.string()),
-      region: v.optional(v.string()),
-      website: v.optional(v.string()),
-      slug: v.optional(v.string()),
-    })),
+    meta: v.optional(
+      v.object({
+        country: v.optional(v.string()),
+        region: v.optional(v.string()),
+        website: v.optional(v.string()),
+        slug: v.optional(v.string()),
+      })
+    ),
   })
-    .searchIndex("searchByName", { searchField: "name", filterFields: ["type"] })
+    .searchIndex("searchByName", {
+      searchField: "name",
+      filterFields: ["type"],
+    })
     .index("byType", ["type"])
     .index("byCreator", ["createdBy"])
     .index("byClerkOrgId", ["clerkOrgId"]),
@@ -106,9 +111,13 @@ export default defineSchema({
     // Clerk membership mirrors (if using Clerk Orgs)
     clerkOrgId: v.optional(v.string()),
     clerkMembershipId: v.optional(v.string()), // "orgmem_..."
-    clerkRole: v.optional(v.string()),         // e.g., "org:admin","org:member"
+    clerkRole: v.optional(v.string()), // e.g., "org:admin","org:member"
     // App-scoped roles for this org (preferred authZ source)
-    orgRole: v.union(v.literal("OWNER"), v.literal("ADMIN"), v.literal("MEMBER")),
+    orgRole: v.union(
+      v.literal("OWNER"),
+      v.literal("ADMIN"),
+      v.literal("MEMBER")
+    ),
     roles: v.array(Role),
     invitedBy: v.id("users"),
     invitedAt: v.number(),
@@ -118,8 +127,7 @@ export default defineSchema({
     .index("byUser", ["userId"])
     .index("byOrgUser", ["orgId", "userId"])
     .index("byClerk", ["clerkOrgId", "clerkMembershipId"])
-    .index("byClerkMembershipId", ["clerkMembershipId"]) ,
-    
+    .index("byClerkMembershipId", ["clerkMembershipId"]),
 
   // -------------------------
   // Producer Assets
@@ -135,23 +143,33 @@ export default defineSchema({
       lon: v.optional(v.number()),
       gridZone: v.optional(v.string()),
     }),
-    tech: v.optional(v.object({
-      electrolyzerType: v.optional(v.string()),
-      capacityMW: v.optional(v.string()),     // decimal string
-      renewableSource: v.optional(v.string()),// e.g., "Solar PPA"
-    })),
+    tech: v.optional(
+      v.object({
+        electrolyzerType: v.optional(v.string()),
+        capacityMW: v.optional(v.string()), // decimal string
+        renewableSource: v.optional(v.string()), // e.g., "Solar PPA"
+      })
+    ),
     createdAt: v.number(),
     createdBy: v.id("users"),
   })
-    .searchIndex("searchFacilities", { searchField: "name", filterFields: ["orgId"] })
+    .searchIndex("searchFacilities", {
+      searchField: "name",
+      filterFields: ["orgId"],
+    })
     .index("byOrg", ["orgId"])
     .index("byFacilityId", ["facilityId"]),
 
   meters: defineTable({
     facilityId: v.id("facilities"),
-    meterId: v.string(),                       // unique per facility (enforce in code)
-    unit: v.string(),                          // "kWh", "kgH2"
-    kind: v.union(v.literal("PRODUCTION"), v.literal("ELECTRICITY"), v.literal("WATER"), v.literal("OTHER")),
+    meterId: v.string(), // unique per facility (enforce in code)
+    unit: v.string(), // "kWh", "kgH2"
+    kind: v.union(
+      v.literal("PRODUCTION"),
+      v.literal("ELECTRICITY"),
+      v.literal("WATER"),
+      v.literal("OTHER")
+    ),
     calibrationDoc: v.optional(CidOrKey),
     createdAt: v.number(),
     createdBy: v.id("users"),
@@ -163,7 +181,7 @@ export default defineSchema({
     meterId: v.id("meters"),
     tsStart: v.number(),
     tsEnd: v.number(),
-    value: v.string(),                         // decimal string
+    value: v.string(), // decimal string
     docRef: v.optional(v.id("docs")),
     hash: v.optional(Hex),
     importedBy: v.id("users"),
@@ -180,12 +198,13 @@ export default defineSchema({
   // Batch Lifecycle
   // -------------------------
   batches: defineTable({
-    batchId: v.string(),                        // deterministic hash
+    batchId: v.string(), // deterministic hash
     producerOrg: v.id("orgs"),
+    batchHumanId: v.optional(v.string()),     // 👈 add this
     facilityId: v.id("facilities"),
     startTs: v.number(),
     endTs: v.number(),
-    amount: v.string(),                          // decimal string
+    amount: v.string(), // decimal string
     meterHash: Hex,
     renewableProofHash: Hex,
     docBundleHash: Hex,
@@ -199,13 +218,17 @@ export default defineSchema({
     rejectReason: v.optional(v.string()),
     issuedBy: v.optional(v.id("users")),
     issuedAt: v.optional(v.number()),
-    chain: v.optional(v.object({
-      chainId: v.optional(v.number()),
-      registry: v.optional(Address),
-      tokenIdHex: v.optional(Hex),
-      issueTx: v.optional(Hex),
-    })),
+    producerWallet: v.optional(v.string()), // 👈 add here
+    chain: v.optional(
+      v.object({
+        chainId: v.optional(v.number()),
+        registry: v.optional(Address),
+        tokenIdHex: v.optional(Hex),
+        issueTx: v.optional(Hex),
+      })
+    ),
   })
+    .index("byExternalId", ["batchHumanId"])
     .index("byBatchId", ["batchId"])
     .index("byFacility", ["facilityId"])
     .index("byProducerOrg", ["producerOrg"])
@@ -235,15 +258,17 @@ export default defineSchema({
     type: DocType,
     provider: StorageProvider,
     storageKey: CidOrKey,
-    hash: Hex,                                  // plaintext hash
+    hash: Hex, // plaintext hash
     size: v.number(),
     mime: v.string(),
     encrypted: v.boolean(),
-    enc: v.optional(v.object({
-      algo: v.string(),                          // "AES-GCM-256"
-      keyId: v.string(),
-      iv: v.optional(Hex),
-    })),
+    enc: v.optional(
+      v.object({
+        algo: v.string(), // "AES-GCM-256"
+        keyId: v.string(),
+        iv: v.optional(Hex),
+      })
+    ),
     createdBy: v.id("users"),
     createdAt: v.number(),
     label: v.optional(v.string()),
@@ -251,8 +276,10 @@ export default defineSchema({
     .index("byBatch", ["batchId"])
     .index("byOwner", ["ownerOrg"])
     .index("byType", ["type", "createdAt"])
-    .searchIndex("searchLabels", { searchField: "label", filterFields: ["ownerOrg", "type"] }),
-    
+    .searchIndex("searchLabels", {
+      searchField: "label",
+      filterFields: ["ownerOrg", "type"],
+    }),
 
   // EIP-712 attestations (off-chain, signed by producer rep wallet)
   attestations: defineTable({
@@ -260,7 +287,7 @@ export default defineSchema({
     signer: Address,
     typedDataHash: Hex,
     signature: Hex,
-    payload: v.string(),                          // normalized JSON
+    payload: v.string(), // normalized JSON
     verified: v.boolean(),
     createdAt: v.number(),
   })
@@ -277,7 +304,7 @@ export default defineSchema({
     txHash: Hex,
     blockNumber: v.number(),
     blockTimeMs: v.number(),
-    args: v.string(),                              // JSON
+    args: v.string(), // JSON
     relatedBatchId: v.optional(v.id("batches")),
   })
     .index("byContract", ["contract", "blockNumber"])
@@ -313,21 +340,36 @@ export default defineSchema({
     .index("byBatch", ["batchId", "retiredAtMs"]),
 
   certificates: defineTable({
-    retireId: v.id("retirements"),
     batchId: v.id("batches"),
-    buyerOrg: v.optional(v.id("orgs")),
-    claimRef: v.string(),
     amount: v.string(),
-    pdfKey: CidOrKey,
-    pdfHash: Hex,
-    createdAt: v.number(),
     createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
     publicSlug: v.string(),
-  })
-    .index("bySlug", ["publicSlug"])
-    .index("byBatch", ["batchId"])
-    .index("byBuyer", ["buyerOrg"]),
+    status: v.optional(v.string()),
 
+    // optional extra metadata
+    buyerOrg: v.optional(v.id("orgs")),
+    claimRef: v.optional(v.string()),
+    pdfKey: v.optional(v.string()),
+    pdfHash: v.optional(v.string()),
+    retireId: v.optional(v.id("retirements")),
+
+    // 👇 add this if you want blockchain anchoring
+    chain: v.optional(
+      v.object({
+        chainId: v.optional(v.number()),
+        registry: v.optional(v.string()),
+        tokenIdHex: v.optional(v.string()),
+        issueTx: v.optional(v.string()),
+      })
+    ),
+    issuedBy: v.optional(v.id("users")),
+    issuedAt: v.optional(v.number()),
+  })
+    .index("byBatch", ["batchId"])
+    .index("bySlug", ["publicSlug"])
+    .index("byBuyer", ["buyerOrg"]),
   // -------------------------
   // API keys / Notifications / Audit / Jobs
   // -------------------------

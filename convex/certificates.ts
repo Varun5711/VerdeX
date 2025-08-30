@@ -1,223 +1,458 @@
-// convex/certificates.ts
+// convex/batches.ts
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "./_generated/dataModel";
 import { api } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 
+// ---------- Role validator (functional roles in your app) ----------
+const RoleV = v.union(
+  v.literal("PRODUCER"),
+  v.literal("CERTIFIER"),
+  v.literal("AUTHORITY"),
+  v.literal("BUYER"),
+  v.literal("AUDITOR"),
+  v.literal("ADMIN")
+);
 
-// ---------- helpers ----------
-function hexLower(s?: string | null) {
-  return (s ?? "").toLowerCase();
-}
-function norm(s?: string | null) {
-  return (s ?? "").trim();
-}
-async function requireAuthorityOrAdmin(ctx: any, clerkUserId: string, orgId: Id<"orgs">) {
+// ---------- Helpers ----------
+async function requireFunctionalRole(
+  ctx: any,
+  clerkUserId: string,
+  orgId: Id<"orgs">,
+  required: Array<"PRODUCER" | "CERTIFIER" | "AUTHORITY" | "ADMIN">
+) {
   const resolved = await ctx.runQuery(api.users.resolveOrgContext, { clerkUserId, orgId });
   if (!resolved) throw new Error("Not a member of this organization");
   const roles: string[] = (resolved.roles ?? []) as string[];
-  const ok = roles.includes("ADMIN") || roles.includes("AUTHORITY");
+  const ok =
+    roles.includes("ADMIN") ||
+    required.some(r => roles.includes(r));
   if (!ok) throw new Error("Insufficient permissions");
 }
-async function getUserByClerk(ctx: any, clerkUserId: string) {
-  const u = await ctx.db
-    .query("users")
-    .withIndex("byClerkUserId", (q: any) => q.eq("clerkUserId", clerkUserId))
-    .unique();
-  if (!u) throw new Error("User not found");
-  return u;
+
+function normalize(s?: string | null) {
+  return (s ?? "").trim();
 }
 
-// ========================== ISSUE / UPSERT ==========================
+function intervalsOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number) {
+  return aStart < bEnd && aEnd > bStart;
+}
 
-/**
- * Issue a certificate anchored to a retirement (retireId) and batch.
- * Uniqueness keyed by `publicSlug` (indexed) — if slug exists, we patch.
- */
+async function hasActiveLockOverlap(
+  ctx: any,
+  facilityId: Id<"facilities">,
+  startTs: number,
+  endTs: number,
+  excludeLockId?: Id<"periodLocks">
+) {
+  const locks = await ctx.db
+    .query("periodLocks")
+    .withIndex("byFacility", q => q.eq("facilityId", facilityId))
+    .collect();
+
+  for (const L of locks) {
+    if (excludeLockId && L._id.toString() === excludeLockId.toString()) continue;
+    if (L.releasedAt) continue;
+    if (intervalsOverlap(startTs, endTs, L.startTs, L.endTs)) return true;
+  }
+  return false;
+}
+
+async function getUserByClerk(ctx: any, clerkUserId: string) {
+  return await ctx.db
+    .query("users")
+    .withIndex("byClerkUserId", q => q.eq("clerkUserId", clerkUserId))
+    .unique();
+}
+
+// ====================== PROPOSE / UPDATE / REJECT ======================
+
+export const propose = mutation({
+  args: {
+    clerkUserId: v.string(),
+    producerOrg: v.id("orgs"),
+    facilityId: v.id("facilities"),
+    batchId: v.string(),                 // deterministic id generated client-side
+    startTs: v.number(),
+    endTs: v.number(),
+    amount: v.string(),                  // decimal string
+    meterHash: v.string(),               // 0x...
+    renewableProofHash: v.string(),      // 0x...
+    docBundleHash: v.string(),           // 0x...
+    status: v.optional(
+      v.union(
+        v.literal("DRAFT"),
+        v.literal("PROPOSED")
+      )
+    ), // default PROPOSED (DRAFT won't create a lock)
+  },
+  handler: async (ctx, args) => {
+    if (!(args.startTs < args.endTs)) throw new Error("Invalid time range");
+
+    // Auth: only PRODUCER (or ADMIN) of producerOrg can propose
+    await requireFunctionalRole(ctx, args.clerkUserId, args.producerOrg, ["PRODUCER", "ADMIN"]);
+
+    // Facility must belong to this org
+    const facility = await ctx.db.get(args.facilityId);
+    if (!facility || facility.orgId.toString() !== args.producerOrg.toString()) {
+      throw new Error("Facility does not belong to the producer org");
+    }
+
+    // Uniqueness on batchId
+    const dup = await ctx.db.query("batches").withIndex("byBatchId", q => q.eq("batchId", args.batchId)).unique();
+    if (dup) throw new Error("Batch with this batchId already exists");
+
+    const creator = await getUserByClerk(ctx, args.clerkUserId);
+
+    const status = args.status ?? "PROPOSED";
+
+    // If PROPOSED, enforce locks (no overlapping active lock)
+    if (status === "PROPOSED") {
+      const overlaps = await hasActiveLockOverlap(ctx, args.facilityId, args.startTs, args.endTs);
+      if (overlaps) throw new Error("Time period overlaps an existing locked batch");
+    }
+
+    const batchIdDb = await ctx.db.insert("batches", {
+      batchId: args.batchId,
+      producerOrg: args.producerOrg,
+      facilityId: args.facilityId,
+      startTs: args.startTs,
+      endTs: args.endTs,
+      amount: normalize(args.amount),
+      meterHash: args.meterHash,
+      renewableProofHash: args.renewableProofHash,
+      docBundleHash: args.docBundleHash,
+      status,
+      createdBy: creator?._id as Id<"users">,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      approvedBy: undefined,
+      approvedAt: undefined,
+      rejectedBy: undefined,
+      rejectReason: undefined,
+      issuedBy: undefined,
+      issuedAt: undefined,
+      chain: undefined,
+    });
+
+    // Create a period lock only for PROPOSED (DRAFT has none)
+    if (status === "PROPOSED") {
+      await ctx.db.insert("periodLocks", {
+        facilityId: args.facilityId,
+        startTs: args.startTs,
+        endTs: args.endTs,
+        batchRef: batchIdDb,
+        reason: "batch-proposal",
+        createdBy: creator?._id as Id<"users">,
+        createdAt: Date.now(),
+        releasedAt: undefined,
+      });
+    }
+
+    return { id: batchIdDb };
+  },
+});
+
+export const update = mutation({
+  args: {
+    clerkUserId: v.string(),
+    id: v.id("batches"),
+    // fields allowed to update before approval
+    startTs: v.optional(v.number()),
+    endTs: v.optional(v.number()),
+    amount: v.optional(v.string()),
+    meterHash: v.optional(v.string()),
+    renewableProofHash: v.optional(v.string()),
+    docBundleHash: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("DRAFT"), v.literal("PROPOSED"))), // can toggle between DRAFT/PROPOSED
+  },
+  handler: async (ctx, args) => {
+    const batch = await ctx.db.get(args.id);
+    if (!batch) throw new Error("Batch not found");
+
+    // Only editable in DRAFT/PROPOSED
+    if (batch.status !== "DRAFT" && batch.status !== "PROPOSED") {
+      throw new Error("Batch can no longer be edited");
+    }
+
+    await requireFunctionalRole(ctx, args.clerkUserId, batch.producerOrg, ["PRODUCER", "ADMIN"]);
+
+    const nextStart = args.startTs ?? batch.startTs;
+    const nextEnd = args.endTs ?? batch.endTs;
+    if (!(nextStart < nextEnd)) throw new Error("Invalid time range");
+
+    // Manage lock transitions
+    // 1) find existing lock (if any) for this batch
+    const existingLock = await ctx.db
+      .query("periodLocks")
+      .withIndex("byFacility", q => q.eq("facilityId", batch.facilityId))
+      .filter(q => q.eq(q.field("batchRef"), args.id))
+      .first();
+
+    // If target status is PROPOSED, ensure an active lock matches new interval
+    const targetStatus = args.status ?? batch.status;
+
+    if (targetStatus === "PROPOSED") {
+      // check overlap vs other active locks (exclude our own lock id if present)
+      const overlap = await hasActiveLockOverlap(
+        ctx,
+        batch.facilityId,
+        nextStart,
+        nextEnd,
+        existingLock?._id
+      );
+      if (overlap) throw new Error("Time period overlaps an existing locked batch");
+
+      if (!existingLock) {
+        // create a new lock
+        const me = await getUserByClerk(ctx, args.clerkUserId);
+        await ctx.db.insert("periodLocks", {
+          facilityId: batch.facilityId,
+          startTs: nextStart,
+          endTs: nextEnd,
+          batchRef: args.id,
+          reason: "batch-proposal",
+          createdBy: me?._id as Id<"users">,
+          createdAt: Date.now(),
+          releasedAt: undefined,
+        });
+      } else {
+        // update lock window
+        await ctx.db.patch(existingLock._id, { startTs: nextStart, endTs: nextEnd, releasedAt: undefined });
+      }
+    } else {
+      // target is DRAFT: if there is a lock, release it
+      if (existingLock && !existingLock.releasedAt) {
+        await ctx.db.patch(existingLock._id, { releasedAt: Date.now() });
+      }
+    }
+
+    const patch: any = { updatedAt: Date.now(), status: targetStatus };
+    if (args.startTs !== undefined) patch.startTs = nextStart;
+    if (args.endTs !== undefined) patch.endTs = nextEnd;
+    if (args.amount !== undefined) patch.amount = normalize(args.amount);
+    if (args.meterHash !== undefined) patch.meterHash = args.meterHash;
+    if (args.renewableProofHash !== undefined) patch.renewableProofHash = args.renewableProofHash;
+    if (args.docBundleHash !== undefined) patch.docBundleHash = args.docBundleHash;
+
+    await ctx.db.patch(args.id, patch);
+    return { ok: true };
+  },
+});
+
+export const reject = mutation({
+  args: {
+    clerkUserId: v.string(),
+    id: v.id("batches"),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, { clerkUserId, id, reason }) => {
+    const batch = await ctx.db.get(id);
+    if (!batch) throw new Error("Batch not found");
+
+    // Only CERTIFIER (or ADMIN) can reject
+    await requireFunctionalRole(ctx, clerkUserId, batch.producerOrg, ["CERTIFIER", "ADMIN"]);
+
+    // Release lock, set status REJECTED
+    const lock = await ctx.db
+      .query("periodLocks")
+      .withIndex("byFacility", q => q.eq("facilityId", batch.facilityId))
+      .filter(q => q.eq(q.field("batchRef"), id))
+      .first();
+    if (lock && !lock.releasedAt) {
+      await ctx.db.patch(lock._id, { releasedAt: Date.now(), reason: "rejected" });
+    }
+
+    const actor = await getUserByClerk(ctx, clerkUserId);
+    await ctx.db.patch(id, {
+      status: "REJECTED",
+      rejectedBy: actor?._id as Id<"users">,
+      rejectReason: reason,
+      updatedAt: Date.now(),
+    });
+
+    return { ok: true };
+  },
+});
+
+// ====================== APPROVE / ISSUE ======================
+
+export const approve = mutation({
+  args: { clerkUserId: v.string(), id: v.id("batches") },
+  handler: async (ctx, { clerkUserId, id }) => {
+    const batch = await ctx.db.get(id);
+    if (!batch) throw new Error("Batch not found");
+
+    // Only CERTIFIER (or ADMIN)
+    await requireFunctionalRole(ctx, clerkUserId, batch.producerOrg, ["CERTIFIER", "ADMIN"]);
+
+    if (batch.status !== "PROPOSED") throw new Error("Batch must be PROPOSED to approve");
+    if (!batch.meterHash || !batch.renewableProofHash || !batch.docBundleHash) {
+      throw new Error("Missing evidence hashes");
+    }
+
+    const actor = await getUserByClerk(ctx, clerkUserId);
+
+    // ✅ Update batch
+    await ctx.db.patch(id, {
+      status: "APPROVED",
+      approvedBy: actor!._id,
+      approvedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    // ✅ Insert a pending certificate
+    await ctx.db.insert("certificates", {
+      batchId: batch._id,
+      amount: batch.amount,
+      createdBy: actor!._id,
+      createdAt: Date.now(),
+      publicSlug: crypto.randomUUID(),
+      status: "PENDING_ISSUE",
+    });
+
+    return { ok: true };
+  },
+});
+
 export const issue = mutation({
   args: {
     clerkUserId: v.string(),
-    retireId: v.id("retirements"),
-    batchId: v.id("batches"),
-    buyerOrg: v.optional(v.id("orgs")),
-    claimRef: v.string(),
-    amount: v.string(),     // decimal string
-    pdfKey: v.string(),     // CID or external key
-    pdfHash: v.string(),    // hex
-    publicSlug: v.string(), // unique public slug
-    createdAt: v.optional(v.number()),
+    id: v.id("certificates"),
+    chain: v.optional(
+      v.object({
+        chainId: v.optional(v.number()),
+        registry: v.optional(v.string()),
+        tokenIdHex: v.optional(v.string()),
+        issueTx: v.optional(v.string()),
+      })
+    ),
   },
-  handler: async (ctx, a) => {
-    // Authorization: AUTHORITY or ADMIN in the producer org of the batch
-    const batch = await ctx.db.get(a.batchId);
-    if (!batch) throw new Error("Batch not found");
-    await requireAuthorityOrAdmin(ctx, a.clerkUserId, batch.producerOrg);
-
-    // resolve actor
-    const actor = await getUserByClerk(ctx, a.clerkUserId);
-
-    // check uniqueness by slug (indexed)
-    const existing = await ctx.db
-      .query("certificates")
-      .withIndex("bySlug", q => q.eq("publicSlug", norm(a.publicSlug)))
-      .unique();
-
-    const doc = {
-      retireId: a.retireId,
-      batchId: a.batchId,
-      buyerOrg: a.buyerOrg,
-      claimRef: norm(a.claimRef),
-      amount: norm(a.amount),
-      pdfKey: norm(a.pdfKey),
-      pdfHash: hexLower(a.pdfHash),
-      createdAt: a.createdAt ?? Date.now(),
-      createdBy: actor._id as Id<"users">,
-      publicSlug: norm(a.publicSlug),
-    };
-
-    if (existing) {
-      await ctx.db.patch(existing._id, doc as any);
-      return { id: existing._id, updated: true };
-    }
-
-    const id = await ctx.db.insert("certificates", doc as any);
-    return { id, created: true };
-  },
-});
-
-// lightweight edits
-
-export const setBuyerOrg = mutation({
-  args: { id: v.id("certificates"), buyerOrg: v.optional(v.id("orgs")) },
-  handler: async (ctx, { id, buyerOrg }) => {
-    await ctx.db.patch(id, { buyerOrg });
-    return { ok: true };
-  },
-});
-
-export const replacePdf = mutation({
-  args: { id: v.id("certificates"), pdfKey: v.string(), pdfHash: v.string() },
-  handler: async (ctx, { id, pdfKey, pdfHash }) => {
-    await ctx.db.patch(id, { pdfKey: norm(pdfKey), pdfHash: hexLower(pdfHash) });
-    return { ok: true };
-  },
-});
-
-export const setSlug = mutation({
-  args: { id: v.id("certificates"), publicSlug: v.string() },
-  handler: async (ctx, { id, publicSlug }) => {
-    // ensure slug uniqueness
-    const existing = await ctx.db
-      .query("certificates")
-      .withIndex("bySlug", q => q.eq("publicSlug", norm(publicSlug)))
-      .unique();
-    if (existing && existing._id.toString() !== id.toString()) {
-      throw new Error("publicSlug already in use");
-    }
-    await ctx.db.patch(id, { publicSlug: norm(publicSlug) });
-    return { ok: true };
-  },
-});
-
-// optional delete (rare; generally avoid deleting certificates)
-export const remove = mutation({
-  args: { clerkUserId: v.string(), id: v.id("certificates") },
-  handler: async (ctx, { clerkUserId, id }) => {
+  handler: async (ctx, { clerkUserId, id, chain }) => {
     const cert = await ctx.db.get(id);
-    if (!cert) return { ok: true };
-    const batch = await ctx.db.get(cert.batchId as Id<"batches">);
-    if (!batch) throw new Error("Parent batch missing");
-    await requireAuthorityOrAdmin(ctx, clerkUserId, batch.producerOrg);
-    await ctx.db.delete(id);
+    if (!cert) throw new Error("Certificate not found");
+
+    const batch = await ctx.db.get(cert.batchId);
+    if (!batch) throw new Error("Batch not found");
+
+    // Only AUTHORITY can issue
+    await requireFunctionalRole(ctx, clerkUserId, batch.producerOrg, ["AUTHORITY", "ADMIN"]);
+
+    if (cert.status !== "PENDING_ISSUE") throw new Error("Certificate must be PENDING_ISSUE");
+
+    const actor = await getUserByClerk(ctx, clerkUserId);
+
+    await ctx.db.patch(id, {
+      status: "ISSUED",
+      updatedAt: Date.now(),
+      chain,
+      issuedBy: actor!._id,
+      issuedAt: Date.now(),
+    });
+
     return { ok: true };
   },
 });
 
-// convex/certificates.ts
+// ====================== ATTESTATIONS (optional) ======================
 
-export const listByOrg = query({
-  args: { orgId: v.id("orgs") },
-  handler: async (ctx, { orgId }) => {
-    return await ctx.db
-      .query("certificates")
-      .withIndex("byBuyer", q => q.eq("buyerOrg", orgId))
-      .collect();
-  },
-});
-
-// ========================== VERIFY (PUBLIC) ==========================
-
-/**
- * Public verifier — given slug and expected pdfHash, confirm certificate integrity.
- * Optionally also check `claimRef` and `amount`.
- */
-export const verify = query({
+export const addAttestation = mutation({
   args: {
-    publicSlug: v.string(),
-    pdfHash: v.string(),
-    claimRef: v.optional(v.string()),
-    amount: v.optional(v.string()),
+    clerkUserId: v.string(),
+    batchId: v.id("batches"),
+    signer: v.string(),           // 0x...
+    typedDataHash: v.string(),    // 0x...
+    signature: v.string(),        // 0x...
+    payload: v.string(),          // JSON string
+    verified: v.optional(v.boolean()), // set true if you verified client-side
   },
-  handler: async (ctx, { publicSlug, pdfHash, claimRef, amount }) => {
-    const cert = await ctx.db
-      .query("certificates")
-      .withIndex("bySlug", q => q.eq("publicSlug", norm(publicSlug)))
-      .unique();
-    if (!cert) return { ok: false, reason: "NOT_FOUND" };
-    if (cert.pdfHash !== hexLower(pdfHash)) return { ok: false, reason: "HASH_MISMATCH" };
-    if (claimRef && norm(cert.claimRef) !== norm(claimRef)) return { ok: false, reason: "CLAIMREF_MISMATCH" };
-    if (amount && norm(cert.amount) !== norm(amount)) return { ok: false, reason: "AMOUNT_MISMATCH" };
-    return { ok: true, id: cert._id, batchId: cert.batchId, retireId: cert.retireId, buyerOrg: cert.buyerOrg };
+  handler: async (ctx, { clerkUserId, batchId, signer, typedDataHash, signature, payload, verified }) => {
+    const batch = await ctx.db.get(batchId);
+    if (!batch) throw new Error("Batch not found");
+
+    // Only producer org members (or admin) should add attestations
+    await requireFunctionalRole(ctx, clerkUserId, batch.producerOrg, ["PRODUCER", "ADMIN"]);
+
+    await ctx.db.insert("attestations", {
+      batchId,
+      signer: signer.toLowerCase(),
+      typedDataHash,
+      signature,
+      payload,
+      verified: verified ?? false,
+      createdAt: Date.now(),
+    });
+
+    return { ok: true };
   },
 });
 
-// ========================== QUERIES ==========================
+// ====================== QUERIES ======================
 
 export const get = query({
-  args: { id: v.id("certificates") },
-  handler: async (ctx, { id }) => ctx.db.get(id),
-});
-
-export const getBySlug = query({
-  args: { publicSlug: v.string() },
-  handler: async (ctx, { publicSlug }) => {
-    return await ctx.db
-      .query("certificates")
-      .withIndex("bySlug", q => q.eq("publicSlug", norm(publicSlug)))
-      .unique();
+  args: { id: v.id("batches") },
+  handler: async (ctx, { id }) => {
+    return await ctx.db.get(id);
   },
 });
 
-export const listByBatch = query({
-  args: { batchId: v.id("batches"), limit: v.optional(v.number()) },
-  handler: async (ctx, { batchId, limit }) => {
-    const rows = await ctx.db
-      .query("certificates")
-      .withIndex("byBatch", q => q.eq("batchId", batchId))
-      .take(limit ?? 100);
-    // stable display: newest first, then slug
-    rows.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0) || (a.publicSlug ?? "").localeCompare(b.publicSlug ?? ""));
-    return rows;
+export const getByBatchId = query({
+  args: { batchId: v.string() },
+  handler: async (ctx, { batchId }) => {
+    return await ctx.db.query("batches").withIndex("byBatchId", q => q.eq("batchId", batchId)).unique();
   },
 });
 
-export const listByBuyer = query({
-  args: { buyerOrg: v.id("orgs"), limit: v.optional(v.number()) },
-  handler: async (ctx, { buyerOrg, limit }) => {
-    const rows = await ctx.db
+export const listByOrg = query({
+  args: { 
+    orgId: v.id("orgs"), 
+    status: v.optional(v.string()), 
+    limit: v.optional(v.number()) 
+  },
+  handler: async (ctx, { orgId, status, limit }) => {
+    // Get all certificates that belong to batches from this org
+    const certificates = await ctx.db
       .query("certificates")
-      .withIndex("byBuyer", q => q.eq("buyerOrg", buyerOrg))
-      .take(limit ?? 100);
-    rows.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
-    return rows;
+      .collect();
+    
+    // Filter certificates by org (through batch relationship)
+    const orgCertificates = [];
+    for (const cert of certificates) {
+      const batch = await ctx.db.get(cert.batchId);
+      if (batch && batch.producerOrg === orgId) {
+        // Add batch info to certificate for display
+        const certWithBatch = {
+          ...cert,
+          batchData: batch, // Include batch data for display
+        };
+        orgCertificates.push(certWithBatch);
+      }
+    }
+    
+    // Filter by status if provided
+    const filtered = status 
+      ? orgCertificates.filter(r => r.status === status) 
+      : orgCertificates;
+    
+    // Sort by creation date (newest first)
+    filtered.sort((a, b) => b.createdAt - a.createdAt);
+    
+    return filtered.slice(0, limit ?? 100);
   },
 });
 
-export const listRecent = query({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx, { limit }) => {
-    const rows = await ctx.db.query("certificates").take(200);
-    rows.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
-    return rows.slice(0, limit ?? 50);
+export const listByFacility = query({
+  args: { facilityId: v.id("facilities"), limit: v.optional(v.number()) },
+  handler: async (ctx, { facilityId, limit }) => {
+    const rows = await ctx.db.query("batches").withIndex("byFacility", q => q.eq("facilityId", facilityId)).take(1000);
+    rows.sort((a, b) => a.startTs - b.startTs);
+    return rows.slice(0, limit ?? 100);
+  },
+});
+
+export const listByStatus = query({
+  args: { status: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, { status, limit }) => {
+    return await ctx.db.query("batches").withIndex("byStatus", q => q.eq("status", status as any)).take(limit ?? 100);
   },
 });
