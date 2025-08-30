@@ -1,5 +1,7 @@
 "use client"
-
+import { FaEthereum } from "react-icons/fa";
+import { SiSolana } from "react-icons/si";
+import { SiIpfs } from "react-icons/si";
 import Link from "next/link"
 import { motion } from "framer-motion"
 import {
@@ -94,6 +96,7 @@ function Node({
           transition={{ duration: 0.6 }}
           className="rounded-2xl p-3 bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-emerald-300 group-hover:from-emerald-400/30 group-hover:to-cyan-400/30 transition-all"
         >
+           
           <Icon className="h-6 w-6" />
         </motion.div>
         <div className="flex-1">
@@ -300,7 +303,6 @@ export default function AboutPage() {
             { text: "Smart Contracts", icon: Cpu },
             { text: "IPFS", icon: GitBranch },
             { text: "Digital Identity", icon: KeySquare },
-            { text: "IoT Oracles", icon: Factory },
             { text: "Regulatory Portal", icon: Eye }
           ].map((item) => (
             <motion.span
@@ -422,7 +424,7 @@ export default function AboutPage() {
               >
                 Data Layer
               </motion.h3>
-              <Node icon={Factory} title="IoT Integration" desc="Real-time data from production facilities via secure IoT sensors and SCADA systems." />
+              <Node icon={Factory} title="IoT Integration" desc="Real-time data from production facilities via secure IoT sensors." />
               <Node icon={GitBranch} title="IPFS Storage" desc="Decentralized certificate storage with cryptographic hashes preventing tampering." />
             </div>
 
@@ -466,7 +468,7 @@ export default function AboutPage() {
                 Interface Layer
               </motion.h3>
               <Node icon={Eye} title="Regulator Dashboard" desc="Real-time monitoring with automated alerts for suspicious activities and compliance." />
-              <Node icon={TrendingUp} title="Market Analytics" desc="Transparent pricing, volume tracking, and market trend analysis for all stakeholders." />
+              <Node icon={TrendingUp} title="Integration Overview" desc="Manage all connected services in one place. Simplify integration work flows and ensure everthing stays synchronized" />
             </div>
           </motion.div>
         </div>
@@ -568,7 +570,7 @@ export default function AboutPage() {
           <Node 
             icon={Eye} 
             title="Regulators" 
-            desc="Environmental agencies gain real-time oversight with automated compliance monitoring and fraud detection."
+            desc="Authorities gain real-time oversight with automated compliance monitoring and fraud detection."
             className="hover:border-blue-500/50"
           />
           <Node 
@@ -625,7 +627,7 @@ export default function AboutPage() {
           <Node 
             icon={KeySquare} 
             title="Identity & Access Control" 
-            desc="Role-based permissions ensure only authorized certifiers can issue credits. Multi-signature security protocols."
+            desc="Role-based permissions ensure only authority can issue credits. Multi-signature security protocols."
             className="hover:shadow-purple-500/30"
           />
         </motion.div>
@@ -712,26 +714,53 @@ export default function AboutPage() {
               Powered By Leading Technologies
             </p>
             <div className="flex flex-wrap justify-center items-center gap-8 opacity-60">
-              {[
-                { name: "Ethereum", desc: "Smart Contracts" },
-                { name: "IPFS", desc: "Decentralized Storage" },
-                { name: "Chainlink", desc: "Oracle Network" },
-                { name: "Polygon", desc: "Layer 2 Scaling" }
-              ].map((tech, index) => (
+              
+               
+               
+           
                 <motion.div
-                  key={tech.name}
+                //   key={tech.name}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.8 + index * 0.1, duration: 0.6 }}
+                  transition={{ delay: 0.8 + 1 * 0.1, duration: 0.6 }}
                   className="text-center group hover:opacity-100 transition-opacity"
                 >
                   <div className="w-16 h-16 mx-auto mb-2 rounded-2xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-center group-hover:border-emerald-500/50 transition-colors">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/20 to-cyan-500/20" />
+                    {/* <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/20 to-cyan-500/20" /> */}
+                    <FaEthereum />
                   </div>
-                  <p className="text-xs font-medium text-slate-300">{tech.name}</p>
-                  <p className="text-xs text-slate-500">{tech.desc}</p>
+                  <p className="text-xs font-medium text-slate-300">Ethereum</p>
+                  <p className="text-xs text-slate-500">Smart Contracts</p>
                 </motion.div>
-              ))}
+                 <motion.div
+                //   key={tech.name}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.8 + 2 * 0.1, duration: 0.6 }}
+                  className="text-center group hover:opacity-100 transition-opacity"
+                >
+                  <div className="w-16 h-16 mx-auto mb-2 rounded-2xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-center group-hover:border-emerald-500/50 transition-colors">
+                    {/* <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/20 to-cyan-500/20" /> */}
+                    <SiIpfs />
+                  </div>
+                  <p className="text-xs font-medium text-slate-300">IPFS</p>
+                  <p className="text-xs text-slate-500">Decentralized Storage</p>
+                </motion.div>
+                 <motion.div
+                //   key={tech.name}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.8 + 3 * 0.1, duration: 0.6 }}
+                  className="text-center group hover:opacity-100 transition-opacity"
+                >
+                  <div className="w-16 h-16 mx-auto mb-2 rounded-2xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-center group-hover:border-emerald-500/50 transition-colors">
+                    {/* <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/20 to-cyan-500/20" /> */}
+                    <SiSolana />
+                  </div>
+                  <p className="text-xs font-medium text-slate-300">Solana</p>
+                  <p className="text-xs text-slate-500">Proof of History</p>
+                </motion.div>
+             
             </div>
           </motion.div>
         </motion.div>

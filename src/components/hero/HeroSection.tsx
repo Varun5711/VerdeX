@@ -76,7 +76,7 @@ const HeroSection = () => {
           </button>
           <Link
             href="/about"
-            className="px-8 py-4 border border-cyan-400 text-cyan-300 font-medium tracking-wide hover:bg-slate-900/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 transition-colors duration-200 text-center"
+            className="px-8 py-4 border border-cyan-400 text-cyan-300 font-medium tracking-wide rounded-full hover:bg-slate-900/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 transition-colors duration-200 text-center"
           >
             Learn More
           </Link>
