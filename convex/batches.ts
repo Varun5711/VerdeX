@@ -80,6 +80,7 @@ export const propose = mutation({
     meterHash: v.string(),
     renewableProofHash: v.string(),
     docBundleHash: v.string(),
+    status: v.optional(v.union(v.literal("DRAFT"), v.literal("PROPOSED"))),
   },
   handler: async (ctx, args) => {
     const creator = await ctx.db
