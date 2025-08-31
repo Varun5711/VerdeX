@@ -39,7 +39,7 @@ async function hasOverlap(
   // Use byMeterTime (keyed on meterId, tsStart) then filter by overlap rule.
   const candidates = await ctx.db
     .query("meterReadings")
-    .withIndex("byMeterTime", q => q.eq("meterId", meterId).lt("tsStart", end))
+    .withIndex("byMeterTime", (q: any) => q.eq("meterId", meterId).lt("tsStart", end))
     .take(1000);
 
   for (const r of candidates) {

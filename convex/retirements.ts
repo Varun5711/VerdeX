@@ -1,6 +1,7 @@
 // convex/retirements.ts
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { api } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
 
@@ -150,5 +151,58 @@ export const listByOrg = query({
       .withIndex("byOwner", q => q.eq("owner", owner))
       .order("desc")
       .collect();
+  },
+});
+
+// Add listForUser function for dashboard data
+export const listForUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    
+    const user = await ctx.db
+      .query("users")
+      .withIndex("byClerkUserId", q => q.eq("clerkUserId", identity.subject))
+      .unique();
+    
+    if (!user) return [];
+    
+    // Get user's organization memberships
+    const memberships = await ctx.db
+      .query("orgMembers")
+      .withIndex("byUser", q => q.eq("userId", user._id))
+      .collect();
+    
+    // Get all org IDs the user is a member of
+    const userOrgIds = memberships.map(m => m.orgId);
+    
+    // Get retirements by user's wallet address (if they have one)
+    let userRetirements = [];
+    if (user.wallet) {
+      const walletRetirements = await ctx.db
+        .query("retirements")
+        .withIndex("byOwner", q => q.eq("owner", user.wallet!.toLowerCase()))
+        .collect();
+      userRetirements.push(...walletRetirements);
+    }
+    
+    // Get retirements by user's organizations through batch relationships
+    const allRetirements = await ctx.db.query("retirements").collect();
+    for (const retirement of allRetirements) {
+      const batch = await ctx.db.get(retirement.batchId);
+      if (batch && userOrgIds.includes(batch.producerOrg)) {
+        // Avoid duplicates if already added by wallet
+        const alreadyAdded = userRetirements.some(r => r._id.toString() === retirement._id.toString());
+        if (!alreadyAdded) {
+          userRetirements.push(retirement);
+        }
+      }
+    }
+    
+    // Sort by retirement date (newest first)
+    userRetirements.sort((a, b) => b.retiredAtMs - a.retiredAtMs);
+    
+    return userRetirements;
   },
 });

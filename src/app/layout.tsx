@@ -6,6 +6,8 @@ import { ClerkProvider } from "@clerk/nextjs";
 import ConvexProvider from "../components/providers/ConvexProvider";
 import WagmiProvider from "../components/providers/WagmiProvider";
 import ThemeProvider from "../components/providers/ThemeProvider";
+import { AuthProvider } from "../contexts/AuthContext";
+import RoleUpgradeModalWrapper from "../components/ui/RoleUpgradeModalWrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,7 +36,10 @@ export default function RootLayout({
           <ThemeProvider>
             <ConvexProvider>
               <WagmiProvider>
-                {children}
+                <AuthProvider>
+                  {children}
+                  <RoleUpgradeModalWrapper />
+                </AuthProvider>
               </WagmiProvider>
             </ConvexProvider>
           </ThemeProvider>

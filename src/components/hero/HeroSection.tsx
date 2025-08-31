@@ -1,16 +1,32 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Vortex } from "../../components/ui/vortex";
 import Link from "next/link";
-
+import { useAppAuth } from "../../contexts/AuthContext";
 
 const HeroSection = () => {
   const [isVisible, setIsVisible] = useState(false);
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAppAuth();
 
   useEffect(() => {
     setIsVisible(true);
   }, []);
+
+  // Handle "Get Started" button click
+  const handleGetStarted = () => {
+    if (isLoading) return; // Don't navigate while loading
+    
+    if (isAuthenticated) {
+      // User is logged in, redirect to dashboard
+      router.push("/dashboard/overview");
+    } else {
+      // User is not logged in, redirect to sign up
+      router.push("/sign-up");
+    }
+  };
 
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-slate-950">
@@ -70,9 +86,22 @@ const HeroSection = () => {
         <div
           className={`mt-12 flex flex-col sm:flex-row gap-4 justify-center transform transition-all duration-700 delay-300 ${isVisible ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`}
         >
-          <button className="px-8 py-4 bg-emerald-500 text-slate-950 font-medium tracking-wide rounded-full hover:bg-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 transition-colors duration-200">
-            Get Started
-            <span className="sr-only"> with green hydrogen credits</span>
+          <button 
+            onClick={handleGetStarted}
+            disabled={isLoading}
+            className="px-8 py-4 bg-emerald-500 text-slate-950 font-medium tracking-wide rounded-full hover:bg-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
+                Loading...
+              </div>
+            ) : (
+              <>
+                {isAuthenticated ? "Go to Dashboard" : "Get Started"}
+                <span className="sr-only"> with green hydrogen credits</span>
+              </>
+            )}
           </button>
           <Link
             href="/about"
@@ -80,7 +109,6 @@ const HeroSection = () => {
           >
             Learn More
           </Link>
-
         </div>
 
         {/* Trust Badges */}

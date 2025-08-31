@@ -247,13 +247,13 @@ export const createOrg = mutation({
       v.literal("BUYER"),
     ),
   },
-  handler: async (ctx, { clerkUserId, name, type }) => {
+  handler: async (ctx, { clerkUserId, name, type }): Promise<Id<"orgs">> => {
     // Resolve convex user
-    const user = await ctx.runQuery(api.users.getUserByClerkId, { clerkUserId });
+    const user: any = await ctx.runQuery(api.users.getUserByClerkId, { clerkUserId });
     if (!user) throw new Error("User not found");
 
     // Insert org
-    const orgId = await ctx.db.insert("orgs", {
+    const orgId: Id<"orgs"> = await ctx.db.insert("orgs", {
       name,
       type,
       createdAt: Date.now(),

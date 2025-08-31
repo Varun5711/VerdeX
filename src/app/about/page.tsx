@@ -1,4 +1,5 @@
 "use client"
+import React from "react";
 import { FaEthereum } from "react-icons/fa";
 import { SiSolana } from "react-icons/si";
 import { SiIpfs } from "react-icons/si";
@@ -42,23 +43,14 @@ const itemVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    scale: 1,
-    transition: {
-      duration: 0.6,
-      ease: [0.22, 1, 0.36, 1]
-    }
+    scale: 1
   }
 }
 
 const floatingVariants = {
   animate: {
     y: [-10, 10, -10],
-    rotate: [-2, 2, -2],
-    transition: {
-      duration: 6,
-      repeat: Infinity,
-      ease: "easeInOut"
-    }
+    rotate: [-2, 2, -2]
   }
 }
 
@@ -79,6 +71,7 @@ function Node({
   return (
     <motion.div
       variants={itemVariants}
+      transition={{ duration: 0.6, ease: "easeOut" }}
       whileHover={{ 
         scale: 1.05,
         rotateY: 5,
@@ -232,6 +225,21 @@ function HeroImage() {
 
 // ---------- Stats Counter ----------
 function StatCounter({ value, label, suffix = "" }: { value: number; label: string; suffix?: string }) {
+  const [displayValue, setDisplayValue] = React.useState(0);
+  
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setDisplayValue(prev => {
+        if (prev < value) {
+          return prev + 1;
+        }
+        return value;
+      });
+    }, 50);
+    
+    return () => clearInterval(timer);
+  }, [value]);
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.5 }}
@@ -239,14 +247,9 @@ function StatCounter({ value, label, suffix = "" }: { value: number; label: stri
       viewport={{ once: true }}
       className="text-center"
     >
-      <motion.div
-        initial={{ textContent: "0" }}
-        whileInView={{ textContent: value.toString() }}
-        transition={{ duration: 2, ease: "easeOut" }}
-        className="text-3xl md:text-4xl font-bold text-emerald-400"
-      >
-        {value}{suffix}
-      </motion.div>
+      <div className="text-3xl md:text-4xl font-bold text-emerald-400">
+        {displayValue}{suffix}
+      </div>
       <p className="text-slate-300 text-sm mt-1">{label}</p>
     </motion.div>
   )
@@ -308,6 +311,7 @@ export default function AboutPage() {
             <motion.span
               key={item.text}
               variants={itemVariants}
+              transition={{ duration: 0.6, ease: "easeOut" }}
               whileHover={{ scale: 1.05, backgroundColor: "rgba(34, 197, 94, 0.1)" }}
               className="flex items-center gap-2 rounded-full border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm px-4 py-2 text-sm text-slate-300 transition-all hover:border-emerald-500/50 hover:text-emerald-300"
             >
@@ -420,6 +424,7 @@ export default function AboutPage() {
             <div className="space-y-6">
               <motion.h3
                 variants={itemVariants}
+                transition={{ duration: 0.6, ease: "easeOut" }}
                 className="text-xl font-semibold text-cyan-400 text-center mb-4"
               >
                 Data Layer
@@ -431,6 +436,7 @@ export default function AboutPage() {
             {/* Center: Blockchain Core */}
             <motion.div
               variants={itemVariants}
+              transition={{ duration: 0.6, ease: "easeOut" }}
               className="relative"
             >
               <div className="h-full rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-900/20 to-cyan-900/20 backdrop-blur-xl p-8 flex flex-col justify-center text-center">
@@ -463,6 +469,7 @@ export default function AboutPage() {
             <div className="space-y-6">
               <motion.h3
                 variants={itemVariants}
+                transition={{ duration: 0.6, ease: "easeOut" }}
                 className="text-xl font-semibold text-blue-400 text-center mb-4"
               >
                 Interface Layer
@@ -507,6 +514,7 @@ export default function AboutPage() {
               <motion.div
                 key={item.title}
                 variants={itemVariants}
+                transition={{ duration: 0.6, ease: "easeOut" }}
                 whileHover={{ y: -8 }}
                 className="relative group"
               >
@@ -648,6 +656,7 @@ export default function AboutPage() {
             <motion.div
               variants={floatingVariants}
               animate="animate"
+              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
               className="relative"
             >
               <h3 className="text-2xl md:text-3xl font-medium text-emerald-300 mb-4">

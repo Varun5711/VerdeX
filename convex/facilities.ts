@@ -46,6 +46,52 @@ export const get = query({
   },
 });
 
+// Add listForUser function for dashboard data
+export const listForUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    
+    const user = await ctx.db
+      .query("users")
+      .withIndex("byClerkUserId", q => q.eq("clerkUserId", identity.subject))
+      .unique();
+    
+    if (!user) return [];
+    
+    // Get user's organization memberships
+    const memberships = await ctx.db
+      .query("orgMembers")
+      .withIndex("byUser", q => q.eq("userId", user._id))
+      .collect();
+    
+    if (memberships.length === 0) return [];
+    
+    // Get all org IDs the user is a member of
+    const userOrgIds = memberships.map(m => m.orgId);
+    
+    // Filter facilities by user's organizations
+    const facilities = await ctx.db
+      .query("facilities")
+      .withIndex("byOrg", q => q.eq("orgId", userOrgIds[0]))
+      .collect();
+    
+    // If user has multiple orgs, get facilities from all of them
+    if (userOrgIds.length > 1) {
+      for (let i = 1; i < userOrgIds.length; i++) {
+        const additionalFacilities = await ctx.db
+          .query("facilities")
+          .withIndex("byOrg", q => q.eq("orgId", userOrgIds[i]))
+          .collect();
+        facilities.push(...additionalFacilities);
+      }
+    }
+    
+    return facilities;
+  },
+});
+
 import { nanoid } from "nanoid";
 
 export const createFacility = mutation({

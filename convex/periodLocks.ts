@@ -37,7 +37,7 @@ async function hasActiveOverlap(
   // We fetch all locks for the facility (quick with byFacility) and filter.
   const locks = await ctx.db
     .query("periodLocks")
-    .withIndex("byFacility", q => q.eq("facilityId", facilityId))
+    .withIndex("byFacility", (q: any) => q.eq("facilityId", facilityId))
     .collect();
 
   for (const L of locks) {

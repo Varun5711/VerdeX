@@ -4,6 +4,52 @@ import { v } from "convex/values";
 import { api } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
+// Add listForUser function for dashboard data
+export const listForUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    
+    const user = await ctx.db
+      .query("users")
+      .withIndex("byClerkUserId", q => q.eq("clerkUserId", identity.subject))
+      .unique();
+    
+    if (!user) return [];
+    
+    // Get user's organization memberships
+    const memberships = await ctx.db
+      .query("orgMembers")
+      .withIndex("byUser", q => q.eq("userId", user._id))
+      .collect();
+    
+    if (memberships.length === 0) return [];
+    
+    // Get all org IDs the user is a member of
+    const userOrgIds = memberships.map(m => m.orgId);
+    
+    // Filter batches by user's organizations
+    const batches = await ctx.db
+      .query("batches")
+      .withIndex("byProducerOrg", q => q.eq("producerOrg", userOrgIds[0]))
+      .collect();
+    
+    // If user has multiple orgs, get batches from all of them
+    if (userOrgIds.length > 1) {
+      for (let i = 1; i < userOrgIds.length; i++) {
+        const additionalBatches = await ctx.db
+          .query("batches")
+          .withIndex("byProducerOrg", q => q.eq("producerOrg", userOrgIds[i]))
+          .collect();
+        batches.push(...additionalBatches);
+      }
+    }
+    
+    return batches;
+  },
+});
+
 // ---------- Role validator (functional roles in your app) ----------
 const RoleV = v.union(
   v.literal("PRODUCER"),
@@ -61,7 +107,7 @@ async function hasActiveLockOverlap(
 async function getUserByClerk(ctx: any, clerkUserId: string) {
   return await ctx.db
     .query("users")
-    .withIndex("byClerkUserId", q => q.eq("clerkUserId", clerkUserId))
+    .withIndex("byClerkUserId", (q: any) => q.eq("clerkUserId", clerkUserId))
     .unique();
 }
 

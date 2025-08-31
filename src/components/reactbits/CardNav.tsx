@@ -2,6 +2,8 @@
 
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
+import { useAppAuth } from "../../contexts/AuthContext";
+import WalletButton from "../ui/WalletButton";
 // use your own icon import if react-icons is not available
 // import { GoArrowUpRight } from "react-icons/go";
 
@@ -47,6 +49,9 @@ const CardNav: React.FC<CardNavProps> = ({
   const navRef = useRef<HTMLDivElement | null>(null);
   const cardsRef = useRef<HTMLDivElement[]>([]);
   const tlRef = useRef<gsap.core.Timeline | null>(null);
+  
+  // Get authentication state
+  const { isAuthenticated, isLoading } = useAppAuth();
 
   const calculateHeight = () => {
     const navEl = navRef.current;
@@ -195,17 +200,25 @@ const CardNav: React.FC<CardNavProps> = ({
           <div className="logo-container flex items-center md:absolute md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 order-1 md:order-none">
             <img src={logo} alt={logoAlt} className="logo h-[28px]" />
           </div> */}
-          <div className="action-button order-3">
-            <a
-              href="#get-started"
-              className="inline-block px-4 py-2 rounded-md font-medium text-[15px] md:text-[16px] transition-colors duration-300 hover:opacity-75"
-              style={{
-                backgroundColor: "#166534",
-                color: "#FFFFFF",
-              }}
-            >
-              Get Started
-            </a>
+          <div className="action-button order-3 flex items-center gap-3">
+            {/* Show wallet button only if not authenticated */}
+            {!isAuthenticated && !isLoading && (
+              <WalletButton variant="compact" />
+            )}
+            
+            {/* Show "Get Started" or "Dashboard" button based on auth status */}
+            {!isLoading && (
+              <a
+                href={isAuthenticated ? "/dashboard/overview" : "/sign-up"}
+                className="inline-block px-4 py-2 rounded-md font-medium text-[15px] md:text-[16px] transition-colors duration-300 hover:opacity-75"
+                style={{
+                  backgroundColor: "#166534",
+                  color: "#FFFFFF",
+                }}
+              >
+                {isAuthenticated ? "Dashboard" : "Get Started"}
+              </a>
+            )}
           </div>
         </div>
 
