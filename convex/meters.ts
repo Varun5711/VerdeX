@@ -87,6 +87,79 @@ export const create = mutation({
   },
 });
 
+// New function for creating meters with extended fields
+export const createMeter = mutation({
+  args: {
+    clerkUserId: v.string(),
+    orgId: v.id("orgs"),
+    facilityId: v.id("facilities"),
+    meterId: v.string(),
+    name: v.string(),
+    type: v.string(),
+    manufacturer: v.string(),
+    model: v.optional(v.string()),
+    serialNumber: v.string(),
+    installationDate: v.number(),
+    lastCalibration: v.number(),
+    nextCalibration: v.number(),
+    status: v.union(
+      v.literal("ACTIVE"),
+      v.literal("MAINTENANCE"),
+      v.literal("CALIBRATION"),
+      v.literal("INACTIVE")
+    ),
+    location: v.optional(v.string()),
+    accuracy: v.optional(v.string()),
+    range: v.optional(v.string()),
+    unit: v.string(),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const fac = await ctx.db.get(args.facilityId);
+    if (!fac) throw new Error("Facility not found");
+
+    await requireOrgRole(ctx, args.clerkUserId, args.orgId, ["ADMIN", "PRODUCER"]);
+
+    const code = normalize(args.meterId);
+    if (!code) throw new Error("meterId required");
+
+    // Uniqueness per facility
+    const exists = await ctx.db
+      .query("meters")
+      .withIndex("byFacilityMeter", q => q.eq("facilityId", args.facilityId).eq("meterId", code))
+      .unique();
+    if (exists) throw new Error("meterId already exists in this facility");
+
+    const me = await ctx.db
+      .query("users")
+      .withIndex("byClerkUserId", q => q.eq("clerkUserId", args.clerkUserId))
+      .unique();
+
+    const _id = await ctx.db.insert("meters", {
+      facilityId: args.facilityId,
+      meterId: code,
+      name: args.name,
+      type: args.type,
+      manufacturer: args.manufacturer,
+      model: args.model,
+      serialNumber: args.serialNumber,
+      installationDate: args.installationDate,
+      lastCalibration: args.lastCalibration,
+      nextCalibration: args.nextCalibration,
+      status: args.status,
+      location: args.location,
+      accuracy: args.accuracy,
+      range: args.range,
+      unit: args.unit,
+      description: args.description,
+      createdAt: Date.now(),
+      createdBy: (me?._id as Id<"users">) ?? undefined,
+    });
+
+    return { meterId: _id };
+  },
+});
+
 export const update = mutation({
   args: {
     clerkUserId: v.string(),
@@ -102,42 +175,48 @@ export const update = mutation({
     ),
     calibrationDoc: v.optional(v.string()),
   },
-  handler: async (ctx, { clerkUserId, id, unit, kind, calibrationDoc }) => {
-    const meter = await ctx.db.get(id);
+  handler: async (ctx, args) => {
+    const meter = await ctx.db.get(args.id);
     if (!meter) throw new Error("Meter not found");
     const fac = await ctx.db.get(meter.facilityId);
     if (!fac) throw new Error("Facility missing");
 
-    await requireOrgRole(ctx, clerkUserId, fac.orgId, ["ADMIN", "PRODUCER"]);
+    await requireOrgRole(ctx, args.clerkUserId, fac.orgId, ["ADMIN", "PRODUCER"]);
 
-    const patch: any = {};
-    if (typeof unit !== "undefined") patch.unit = normalize(unit);
-    if (typeof kind !== "undefined") patch.kind = kind;
-    if (typeof calibrationDoc !== "undefined") patch.calibrationDoc = calibrationDoc;
+    const updates: any = {};
+    if (args.unit !== undefined) updates.unit = normalize(args.unit);
+    if (args.kind !== undefined) updates.kind = args.kind;
+    if (args.calibrationDoc !== undefined) updates.calibrationDoc = args.calibrationDoc;
 
-    if (Object.keys(patch).length) await ctx.db.patch(id, patch);
+    await ctx.db.patch(args.id, updates);
     return { ok: true };
   },
 });
 
-export const remove = mutation({
-  args: { clerkUserId: v.string(), id: v.id("meters") },
-  handler: async (ctx, { clerkUserId, id }) => {
-    const meter = await ctx.db.get(id);
-    if (!meter) return { ok: true };
+export const deleteMeter = mutation({
+  args: {
+    clerkUserId: v.string(),
+    meterId: v.id("meters"),
+  },
+  handler: async (ctx, args) => {
+    const meter = await ctx.db.get(args.meterId);
+    if (!meter) throw new Error("Meter not found");
     const fac = await ctx.db.get(meter.facilityId);
     if (!fac) throw new Error("Facility missing");
 
-    await requireOrgRole(ctx, clerkUserId, fac.orgId, ["ADMIN"]);
+    await requireOrgRole(ctx, args.clerkUserId, fac.orgId, ["ADMIN", "PRODUCER"]);
 
-    // prevent deletion if readings exist
-    const anyReading = await ctx.db
+    // Check if meter has readings
+    const readings = await ctx.db
       .query("meterReadings")
-      .withIndex("byMeter", q => q.eq("meterId", id))
+      .withIndex("byMeter", q => q.eq("meterId", args.meterId))
       .first();
-    if (anyReading) throw new Error("Delete readings first");
+    
+    if (readings) {
+      throw new Error("Cannot delete meter with existing readings");
+    }
 
-    await ctx.db.delete(id);
+    await ctx.db.delete(args.meterId);
     return { ok: true };
   },
 });
@@ -156,6 +235,35 @@ export const listByFacility = query({
       .query("meters")
       .withIndex("byFacility", q => q.eq("facilityId", facilityId))
       .collect();
+  },
+});
+
+export const listByOrg = query({
+  args: { orgId: v.id("orgs") },
+  handler: async (ctx, { orgId }) => {
+    // Get all facilities for the org, then get meters for each facility
+    const facilities = await ctx.db
+      .query("facilities")
+      .withIndex("byOrg", q => q.eq("orgId", orgId))
+      .collect();
+    
+    const facilityIds = facilities.map(f => f._id);
+    const meters = await ctx.db
+      .query("meters")
+      .withIndex("byFacility", q => q.in("facilityId", facilityIds))
+      .collect();
+    
+    // Join with facility data
+    return meters.map(meter => {
+      const facility = facilities.find(f => f._id === meter.facilityId);
+      return {
+        ...meter,
+        facility: facility ? {
+          name: facility.name,
+          facilityId: facility.facilityId,
+        } : undefined,
+      };
+    });
   },
 });
 

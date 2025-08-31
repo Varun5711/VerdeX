@@ -343,3 +343,13 @@ export const deleteByClerkMembershipId = mutation({
     return { ok: true };
   },
 });
+
+export const listByOrg = query({
+  args: { orgId: v.id("orgs") },
+  handler: async (ctx, { orgId }) => {
+    return await ctx.db
+      .query("orgMembers")
+      .withIndex("byOrg", q => q.eq("orgId", orgId))
+      .collect();
+  },
+});

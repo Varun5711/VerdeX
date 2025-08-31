@@ -228,3 +228,10 @@ export const listUserMemberships = query({
       .collect();
   },
 });
+
+export const getById = query({
+  args: { orgId: v.id("orgs") },
+  handler: async (ctx, { orgId }) => {
+    return await ctx.db.get(orgId);
+  },
+});

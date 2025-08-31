@@ -85,6 +85,113 @@ export const issue = mutation({
   },
 });
 
+/**
+ * Issue a certificate from an approved batch (without requiring a retirement first).
+ * This is used for direct certificate issuance from approved batches.
+ */
+export const issueFromBatch = mutation({
+  args: {
+    clerkUserId: v.string(),
+    orgId: v.id("orgs"),
+    batchId: v.id("batches"),
+    amount: v.string(),
+    standard: v.string(),
+    validFromMs: v.number(),
+    validToMs: v.number(),
+    verificationMethod: v.optional(v.string()),
+    complianceNotes: v.optional(v.string()),
+    blockchainTxHash: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const { clerkUserId, orgId, batchId, amount, standard, validFromMs, validToMs, verificationMethod, complianceNotes, blockchainTxHash, metadata } = args;
+
+    // Check if user has permission to issue certificates for this org
+    const orgMember = await ctx.db
+      .query("orgMembers")
+      .withIndex("byUserAndOrg", q => q.eq("clerkUserId", clerkUserId).eq("orgId", orgId))
+      .unique();
+
+    if (!orgMember) {
+      throw new Error("User is not a member of this organization");
+    }
+
+    // Check if user has permission to issue certificates
+    if (!orgMember.roles.includes("admin") && !orgMember.roles.includes("authority")) {
+      throw new Error("Insufficient permissions to issue certificates");
+    }
+
+    // Verify batch exists and belongs to this org
+    const batch = await ctx.db.get(batchId);
+    if (!batch) {
+      throw new Error("Batch not found");
+    }
+
+    // Get facility to check org ownership
+    const facility = await ctx.db.get(batch.facilityId);
+    if (!facility || facility.orgId !== orgId) {
+      throw new Error("Batch does not belong to this organization");
+    }
+
+    // Check if batch is approved
+    if (batch.status !== "APPROVED") {
+      throw new Error("Batch must be approved before issuing certificates");
+    }
+
+    // Generate unique certificate ID and claim reference
+    const certificateId = `CERT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const claimRef = `CLAIM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const publicSlug = `cert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create certificate record
+    const certId = await ctx.db.insert("certificates", {
+      batchId,
+      retireId: null, // No retirement for direct issuance
+      buyerOrg: null, // No buyer org for direct issuance
+      claimRef,
+      amount,
+      pdfKey: "", // Will be set later when PDF is generated
+      pdfHash: "", // Will be set later when PDF is generated
+      publicSlug,
+      createdAt: Date.now(),
+      createdBy: clerkUserId as any, // Will be resolved to user ID
+      standard,
+      validFromMs,
+      validToMs,
+      verificationMethod: verificationMethod || null,
+      complianceNotes: complianceNotes || null,
+      blockchainTxHash: blockchainTxHash || null,
+      metadata: metadata || {},
+    });
+
+    // Log the action
+    await ctx.db.insert("auditLog", {
+      orgId,
+      action: "certificate_issued",
+      resource: "certificates",
+      resourceId: certId,
+      userId: clerkUserId,
+      metadata: {
+        batchId,
+        amount,
+        standard,
+        claimRef,
+        certificateId,
+      },
+      ipAddress: null,
+      userAgent: null,
+      timestamp: Date.now(),
+    });
+
+    return { 
+      id: certId, 
+      certificateId, 
+      claimRef, 
+      publicSlug 
+    };
+  },
+});
+
 // lightweight edits
 
 export const setBuyerOrg = mutation({

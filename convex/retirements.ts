@@ -65,6 +65,97 @@ export const attachCertificate = mutation({
   },
 });
 
+/**
+ * Create a new retirement record.
+ */
+export const create = mutation({
+  args: {
+    clerkUserId: v.string(),
+    orgId: v.id("orgs"),
+    batchId: v.id("batches"),
+    amount: v.string(),
+    retiredAtMs: v.number(),
+    reason: v.string(),
+    location: v.optional(v.string()),
+    verificationMethod: v.optional(v.string()),
+    verificationNotes: v.optional(v.string()),
+    blockchainTxHash: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const { clerkUserId, orgId, batchId, amount, retiredAtMs, reason, location, verificationMethod, verificationNotes, blockchainTxHash, metadata } = args;
+
+    // Check if user has permission to create retirements for this org
+    const orgMember = await ctx.db
+      .query("orgMembers")
+      .withIndex("byUserAndOrg", q => q.eq("clerkUserId", clerkUserId).eq("orgId", orgId))
+      .unique();
+
+    if (!orgMember) {
+      throw new Error("User is not a member of this organization");
+    }
+
+    // Check if user has permission to create retirements
+    if (!orgMember.roles.includes("admin") && !orgMember.roles.includes("manager")) {
+      throw new Error("Insufficient permissions to create retirements");
+    }
+
+    // Verify batch exists and belongs to this org
+    const batch = await ctx.db.get(batchId);
+    if (!batch) {
+      throw new Error("Batch not found");
+    }
+
+    // Get facility to check org ownership
+    const facility = await ctx.db.get(batch.facilityId);
+    if (!facility || facility.orgId !== orgId) {
+      throw new Error("Batch does not belong to this organization");
+    }
+
+    // Generate unique claim reference
+    const claimRef = `RET-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create retirement record
+    const retirementId = await ctx.db.insert("retirements", {
+      orgId,
+      batchId,
+      amount,
+      retiredAtMs,
+      reason,
+      location: location || null,
+      verificationMethod: verificationMethod || null,
+      verificationNotes: verificationNotes || null,
+      blockchainTxHash: blockchainTxHash || null,
+      metadata: metadata || {},
+      claimRef,
+      owner: orgId, // Use orgId as owner for organization-level tracking
+      certificateId: null, // Will be linked later if needed
+      createdAtMs: Date.now(),
+      createdBy: clerkUserId,
+    });
+
+    // Log the action
+    await ctx.db.insert("auditLog", {
+      orgId,
+      action: "retirement_created",
+      resource: "retirements",
+      resourceId: retirementId,
+      userId: clerkUserId,
+      metadata: {
+        batchId,
+        amount,
+        reason,
+        claimRef,
+      },
+      ipAddress: null,
+      userAgent: null,
+      timestamp: Date.now(),
+    });
+
+    return { id: retirementId, claimRef };
+  },
+});
+
 // =================== Queries ===================
 
 export const get = query({

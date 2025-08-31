@@ -378,6 +378,119 @@ export const addAttestation = mutation({
   },
 });
 
+/**
+ * Create a new batch record.
+ */
+export const create = mutation({
+  args: {
+    clerkUserId: v.string(),
+    orgId: v.id("orgs"),
+    facilityId: v.id("facilities"),
+    batchId: v.string(),
+    startTs: v.number(),
+    endTs: v.number(),
+    amount: v.string(),
+    meterHash: v.string(),
+    renewableProofHash: v.string(),
+    docBundleHash: v.string(),
+    description: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const { clerkUserId, orgId, facilityId, batchId, startTs, endTs, amount, meterHash, renewableProofHash, docBundleHash, description, metadata } = args;
+
+    if (!(startTs < endTs)) {
+      throw new Error("Invalid time range");
+    }
+
+    // Check if user has permission to create batches for this org
+    const orgMember = await ctx.db
+      .query("orgMembers")
+      .withIndex("byUserAndOrg", q => q.eq("clerkUserId", clerkUserId).eq("orgId", orgId))
+      .unique();
+
+    if (!orgMember) {
+      throw new Error("User is not a member of this organization");
+    }
+
+    // Check if user has permission to create batches
+    if (!orgMember.roles.includes("admin") && !orgMember.roles.includes("producer")) {
+      throw new Error("Insufficient permissions to create batches");
+    }
+
+    // Verify facility exists and belongs to this org
+    const facility = await ctx.db.get(facilityId);
+    if (!facility || facility.orgId !== orgId) {
+      throw new Error("Facility does not belong to this organization");
+    }
+
+    // Check for overlapping time periods
+    const hasOverlap = await hasActiveLockOverlap(ctx, facilityId, startTs, endTs);
+    if (hasOverlap) {
+      throw new Error("Time period overlaps with existing batch or lock");
+    }
+
+    // Get user
+    const user = await getUserByClerk(ctx, clerkUserId);
+
+    // Create batch record
+    const batchId_db = await ctx.db.insert("batches", {
+      producerOrg: orgId,
+      facilityId,
+      batchId: normalize(batchId),
+      startTs,
+      endTs,
+      amount: normalize(amount),
+      meterHash: hexLower(meterHash),
+      renewableProofHash: hexLower(renewableProofHash),
+      docBundleHash: hexLower(docBundleHash),
+      description: description || null,
+      metadata: metadata || {},
+      status: "DRAFT",
+      createdAt: Date.now(),
+      createdBy: user._id,
+      updatedAt: Date.now(),
+      approvedBy: null,
+      approvedAt: null,
+      issuedBy: null,
+      issuedAt: null,
+      chain: null,
+    });
+
+    // Create period lock to prevent double counting
+    await ctx.db.insert("periodLocks", {
+      facilityId,
+      batchId: batchId_db,
+      startTs,
+      endTs,
+      createdAt: Date.now(),
+      createdBy: user._id,
+      releasedAt: null,
+    });
+
+    // Log the action
+    await ctx.db.insert("auditLog", {
+      orgId,
+      action: "batch_created",
+      resource: "batches",
+      resourceId: batchId_db,
+      userId: clerkUserId,
+      metadata: {
+        facilityId,
+        batchId,
+        amount,
+        startTs,
+        endTs,
+      },
+      ipAddress: null,
+      userAgent: null,
+      timestamp: Date.now(),
+    });
+
+    return { id: batchId_db };
+  },
+});
+
 // ====================== QUERIES ======================
 
 export const get = query({
@@ -418,5 +531,16 @@ export const listByStatus = query({
   args: { status: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, { status, limit }) => {
     return await ctx.db.query("batches").withIndex("byStatus", q => q.eq("status", status as any)).take(limit ?? 100);
+  },
+});
+
+export const listByProducerOrg = query({
+  args: { producerOrg: v.id("orgs"), status: v.optional(v.string()), limit: v.optional(v.number()) },
+  handler: async (ctx, { producerOrg, status, limit }) => {
+    let q = ctx.db.query("batches").withIndex("byProducerOrg", qb => qb.eq("producerOrg", producerOrg));
+    const rows = await q.take(1000);
+    const filtered = status ? rows.filter(r => r.status === status) : rows;
+    filtered.sort((a, b) => b.createdAt - a.createdAt);
+    return filtered.slice(0, limit ?? 100);
   },
 });

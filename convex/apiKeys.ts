@@ -123,6 +123,28 @@ export const markUsed = mutation({
   },
 });
 
+export const deleteApiKey = mutation({
+  args: { clerkUserId: v.string(), id: v.id("apiKeys") },
+  handler: async (ctx, { clerkUserId, id }) => {
+    const key = await ctx.db.get(id);
+    if (!key) return { ok: true };
+    await requireAdminInOrg(ctx, clerkUserId, key.ownerOrg);
+    await ctx.db.delete(id);
+    return { ok: true };
+  },
+});
+
+export const revokeApiKey = mutation({
+  args: { clerkUserId: v.string(), id: v.id("apiKeys") },
+  handler: async (ctx, { clerkUserId, id }) => {
+    const key = await ctx.db.get(id);
+    if (!key) return { ok: true };
+    await requireAdminInOrg(ctx, clerkUserId, key.ownerOrg);
+    await ctx.db.patch(id, { disabled: true });
+    return { ok: true };
+  },
+});
+
 // ---------------------- Queries ----------------------
 
 export const validate = query({

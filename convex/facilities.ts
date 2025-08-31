@@ -185,43 +185,110 @@ export const listFacilities = query({
 export const createMeter = mutation({
   args: {
     clerkUserId: v.string(),
+    orgId: v.id("orgs"),
     facilityId: v.id("facilities"),
-    meterId: v.string(), // unique per facility
-    unit: v.string(), // "kWh", "kgH2", ...
-    kind: v.union(v.literal("PRODUCTION"), v.literal("ELECTRICITY"), v.literal("WATER"), v.literal("OTHER")),
-    calibrationDoc: v.optional(v.string()), // CID or object key
+    meterId: v.string(),
+    name: v.string(),
+    type: v.string(),
+    manufacturer: v.optional(v.string()),
+    model: v.optional(v.string()),
+    serialNumber: v.optional(v.string()),
+    installationDate: v.optional(v.number()),
+    calibrationDate: v.optional(v.number()),
+    status: v.union(v.literal("ACTIVE"), v.literal("INACTIVE"), v.literal("MAINTENANCE"), v.literal("RETIRED")),
+    location: v.optional(v.string()),
+    accuracy: v.optional(v.string()),
+    range: v.optional(v.string()),
+    unit: v.optional(v.string()),
+    description: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const fac = await ctx.db.get(args.facilityId);
-    if (!fac) throw new Error("Facility not found");
-    await requireOrgRole(ctx, args.clerkUserId, fac.orgId, ["ADMIN", "PRODUCER"]);
+    const { clerkUserId, orgId, facilityId, meterId, name, type, manufacturer, model, serialNumber, installationDate, calibrationDate, status, location, accuracy, range, unit, description } = args;
 
-    const code = normalizeStr(args.meterId);
-    if (!code) throw new Error("meterId required");
+    // Check if user has permission to create meters for this org
+    const orgMember = await ctx.db
+      .query("orgMembers")
+      .withIndex("byUserAndOrg", q => q.eq("clerkUserId", clerkUserId).eq("orgId", orgId))
+      .unique();
 
-    // Uniqueness per facility
-    const existing = await ctx.db
+    if (!orgMember) {
+      throw new Error("User is not a member of this organization");
+    }
+
+    // Check if user has permission to create meters
+    if (!orgMember.roles.includes("admin") && !orgMember.roles.includes("producer")) {
+      throw new Error("Insufficient permissions to create meters");
+    }
+
+    // Verify facility exists and belongs to this org
+    const facility = await ctx.db.get(facilityId);
+    if (!facility || facility.orgId !== orgId) {
+      throw new Error("Facility does not belong to this organization");
+    }
+
+    // Check if meter ID is unique within the facility
+    const existingMeter = await ctx.db
       .query("meters")
-      .withIndex("byFacilityMeter", q => q.eq("facilityId", args.facilityId).eq("meterId", code))
-      .unique();
-    if (existing) throw new Error("meterId already exists in this facility");
+      .withIndex("byFacility", q => q.eq("facilityId", facilityId))
+      .filter(q => q.eq(q.field("meterId"), meterId))
+      .first();
 
-    const me = await ctx.db
+    if (existingMeter) {
+      throw new Error("Meter ID already exists in this facility");
+    }
+
+    // Get user
+    const user = await ctx.db
       .query("users")
-      .withIndex("byClerkUserId", q => q.eq("clerkUserId", args.clerkUserId))
+      .withIndex("byClerkUserId", q => q.eq("clerkUserId", clerkUserId))
       .unique();
 
-    const _id = await ctx.db.insert("meters", {
-      facilityId: args.facilityId,
-      meterId: code,
-      unit: normalizeStr(args.unit),
-      kind: args.kind,
-      calibrationDoc: args.calibrationDoc,
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Create meter record
+    const meterId_db = await ctx.db.insert("meters", {
+      facilityId,
+      meterId: meterId.trim(),
+      name: name.trim(),
+      type: type.trim(),
+      manufacturer: manufacturer?.trim() || null,
+      model: model?.trim() || null,
+      serialNumber: serialNumber?.trim() || null,
+      installationDate: installationDate || null,
+      calibrationDate: calibrationDate || null,
+      status,
+      location: location?.trim() || null,
+      accuracy: accuracy?.trim() || null,
+      range: range?.trim() || null,
+      unit: unit?.trim() || null,
+      description: description?.trim() || null,
       createdAt: Date.now(),
-      createdBy: me?._id as Id<"users">,
+      createdBy: user._id,
+      updatedAt: Date.now(),
     });
 
-    return { meterId: _id };
+    // Log the action
+    await ctx.db.insert("auditLog", {
+      orgId,
+      action: "meter_created",
+      resource: "meters",
+      resourceId: meterId_db,
+      userId: clerkUserId,
+      metadata: {
+        facilityId,
+        meterId,
+        name,
+        type,
+        status,
+      },
+      ipAddress: null,
+      userAgent: null,
+      timestamp: Date.now(),
+    });
+
+    return { id: meterId_db };
   },
 });
 
@@ -455,3 +522,122 @@ export const flagReading = mutation({
     return { ok: true };
   },
 });
+
+// Alias for backward compatibility
+export const create = createFacility;
+
+/**
+ * Create a new meter record.
+ */
+export const createMeter = mutation({
+  args: {
+    clerkUserId: v.string(),
+    orgId: v.id("orgs"),
+    facilityId: v.id("facilities"),
+    meterId: v.string(),
+    name: v.string(),
+    type: v.string(),
+    manufacturer: v.optional(v.string()),
+    model: v.optional(v.string()),
+    serialNumber: v.optional(v.string()),
+    installationDate: v.optional(v.number()),
+    calibrationDate: v.optional(v.number()),
+    status: v.union(v.literal("ACTIVE"), v.literal("INACTIVE"), v.literal("MAINTENANCE"), v.literal("RETIRED")),
+    location: v.optional(v.string()),
+    accuracy: v.optional(v.string()),
+    range: v.optional(v.string()),
+    unit: v.optional(v.string()),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { clerkUserId, orgId, facilityId, meterId, name, type, manufacturer, model, serialNumber, installationDate, calibrationDate, status, location, accuracy, range, unit, description } = args;
+
+    // Check if user has permission to create meters for this org
+    const orgMember = await ctx.db
+      .query("orgMembers")
+      .withIndex("byUserAndOrg", q => q.eq("clerkUserId", clerkUserId).eq("orgId", orgId))
+      .unique();
+
+    if (!orgMember) {
+      throw new Error("User is not a member of this organization");
+    }
+
+    // Check if user has permission to create meters
+    if (!orgMember.roles.includes("admin") && !orgMember.roles.includes("producer")) {
+      throw new Error("Insufficient permissions to create meters");
+    }
+
+    // Verify facility exists and belongs to this org
+    const facility = await ctx.db.get(facilityId);
+    if (!facility || facility.orgId !== orgId) {
+      throw new Error("Facility does not belong to this organization");
+    }
+
+    // Check if meter ID is unique within the facility
+    const existingMeter = await ctx.db
+      .query("meters")
+      .withIndex("byFacility", q => q.eq("facilityId", facilityId))
+      .filter(q => q.eq(q.field("meterId"), meterId))
+      .first();
+
+    if (existingMeter) {
+      throw new Error("Meter ID already exists in this facility");
+    }
+
+    // Get user
+    const user = await ctx.db
+      .query("users")
+      .withIndex("byClerkUserId", q => q.eq("clerkUserId", clerkUserId))
+      .unique();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Create meter record
+    const meterId_db = await ctx.db.insert("meters", {
+      facilityId,
+      meterId: meterId.trim(),
+      name: name.trim(),
+      type: type.trim(),
+      manufacturer: manufacturer?.trim() || null,
+      model: model?.trim() || null,
+      serialNumber: serialNumber?.trim() || null,
+      installationDate: installationDate || null,
+      calibrationDate: calibrationDate || null,
+      status,
+      location: location?.trim() || null,
+      accuracy: accuracy?.trim() || null,
+      range: range?.trim() || null,
+      unit: unit?.trim() || null,
+      description: description?.trim() || null,
+      createdAt: Date.now(),
+      createdBy: user._id,
+      updatedAt: Date.now(),
+    });
+
+    // Log the action
+    await ctx.db.insert("auditLog", {
+      orgId,
+      action: "meter_created",
+      resource: "meters",
+      resourceId: meterId_db,
+      userId: clerkUserId,
+      metadata: {
+        facilityId,
+        meterId,
+        name,
+        type,
+        status,
+      },
+      ipAddress: null,
+      userAgent: null,
+      timestamp: Date.now(),
+    });
+
+    return { id: meterId_db };
+  },
+});
+
+// Alias for backward compatibility
+export const delete = deleteFacility;

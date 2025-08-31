@@ -73,3 +73,16 @@ export const listRecent = query({
     return rows.slice(0, limit ?? 200);
   },
 });
+
+/** list entries for a given organization */
+export const listByOrg = query({
+  args: { orgId: v.id("orgs"), limit: v.optional(v.number()) },
+  handler: async (ctx, { orgId, limit }) => {
+    const rows = await ctx.db
+      .query("auditLog")
+      .withIndex("byOrg", q => q.eq("orgId", orgId))
+      .take(1000);
+    rows.sort((a, b) => b.timestamp - a.timestamp);
+    return rows.slice(0, limit ?? 200);
+  },
+});
